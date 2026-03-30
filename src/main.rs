@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 use rusqlite::{Connection, Result};
 
 mod error;
+mod sqlx;
 mod agent;
 mod ticket;
 mod note;
@@ -18,8 +19,6 @@ struct Options {
   verbose: bool,
   #[clap(long, help="Path to the project root")]
   project: String,
-  #[clap(long, help="A unique identifier of the agent operating on the project (use: 'agent new' to assign a new identifier)")]
-  agent: Option<String>,
   #[clap(long, help="Path to the database")]
   database: Option<String>,
   #[clap(subcommand)]
