@@ -13,6 +13,7 @@ pub enum Error {
   FromUtf8Error(string::FromUtf8Error),
   ParseIntError(num::ParseIntError),
   RusqliteError(rusqlite::Error),
+  ArgumentError(String),
 }
 
 impl From<str::Utf8Error> for Error {
@@ -53,6 +54,7 @@ impl fmt::Display for Error {
       Self::FromUtf8Error(err) => err.fmt(f),
       Self::ParseIntError(err) => err.fmt(f),
       Self::RusqliteError(err) => err.fmt(f),
+      Self::ArgumentError(msg) => write!(f, "{}", msg),
     }
   }
 }

@@ -66,6 +66,10 @@ impl rusqlite::types::ToSql for State {
   }
 }
 
+pub fn format_id(id: i32) -> String {
+  format!("#{}", id)
+}
+
 #[derive(Debug)]
 pub struct Ticket {
   pub id: i32,
@@ -73,6 +77,7 @@ pub struct Ticket {
   pub summary: String,
   pub detail: Option<String>,
   pub data: Option<Vec<u8>>,
+  pub owner_id: Option<String>,
   pub created_at: DateTime<Utc>,
   pub updated_at: DateTime<Utc>,
 }
@@ -86,6 +91,7 @@ impl Ticket {
         summary    TEXT NOT NULL,
         detail     TEXT,
         data       BLOB,
+        owner_id   TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )",
