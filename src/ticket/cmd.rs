@@ -1,3 +1,5 @@
+use std::prelude::rust_2015;
+
 use clap::{Subcommand, Args};
 use rusqlite::{Connection, Result};
 
@@ -31,6 +33,8 @@ pub struct CreateTicketOptions {
 
 #[derive(Args, Debug)]
 pub struct ListTicketOptions {
+  #[clap(long, help="Only include issues owned by any of the specified agents")]
+  owner: Option<Vec<String>>,
 }
 
 #[derive(Args, Debug)]
@@ -80,13 +84,29 @@ fn create_ticket(_opts: &Options, _ticket: &TicketOptions, create: &CreateTicket
   Ok(())
 }
 
-fn list_ticket(_opts: &Options, _ticket: &TicketOptions, _list: &ListTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  let mut stmt = conn.prepare("
+fn list_ticket(_opts: &Options, _ticket: &TicketOptions, list: &ListTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  let mut query = "
     SELECT id, state, summary, detail, data, owner_id, created_at, updated_at
-    FROM ticket"
-  )?;
+    FROM ticket".to_string();
 
-  let tkts_iter = stmt.query_map([], |row| {
+  let mut args: Vec<&dyn rusqlite::types::ToSql> = vec![];
+  if let Some(owners) = &list.owner {
+    let mut n = 0;
+    query.push_str("
+      WHERE owner_id IN (");
+    for owner in owners {
+      if n > 0 {
+        query.push_str(", ");
+      }
+      query.push_str(&format!("?{}", args.len() + 1));
+      args.push(owner);
+      n = n + 1;
+    }
+    query.push_str(")");
+  }
+
+  let mut stmt = conn.prepare(&query)?;
+  let tkts_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), |row| {
     Ok(ticket::Ticket {
       id: row.get(0)?,
       state: row.get(1)?,
