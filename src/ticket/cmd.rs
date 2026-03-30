@@ -113,9 +113,7 @@ fn take_ticket(opts: &Options, _ticket: &TicketOptions, take: &TakeTicketOptions
   let mut stmt = conn.prepare("
     UPDATE ticket SET owner_id = ?1
     WHERE id = ?2
-    AND (
-      owner_id IS NULL OR owner_id = $3
-    )
+    AND (owner_id IS NULL OR owner_id = $3)
     RETURNING id",
   )?;
 
@@ -129,7 +127,7 @@ fn take_ticket(opts: &Options, _ticket: &TicketOptions, take: &TakeTicketOptions
     Some(next) => next?? == take.id,
     None       => false,
   } {
-    return Err(error::Error::ArgumentError("Ticket could not be taken".to_owned()));
+    return Err(error::Error::ArgumentError(format!("{} is already taken by {}", ticket::format_id(take.id), agent_id).to_owned()));
   }
 
   println!("{} owns {}", agent_id, ticket::format_id(take.id));

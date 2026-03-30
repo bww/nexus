@@ -38,7 +38,7 @@ fn main() {
   match cmd(){
     Ok(_)    => return,
     Err(err) => {
-      eprintln!("{}", &format!("* * * {}", err).yellow().bold());
+      eprintln!("{}", &format!("error: {}", err).yellow().bold());
       process::exit(1);
     },
   };
