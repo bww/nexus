@@ -37,6 +37,8 @@ pub struct ListTicketOptions {
 pub struct TakeTicketOptions {
   #[clap(long, help="The ticket to take ownership of")]
   id: i32,
+  #[clap(long, help="Take ownership even if the ticket is already owned by another agent (this should only be used to resolve proven coordination failures)")]
+  force: bool
 }
 
 #[derive(Args, Debug)]
@@ -113,12 +115,12 @@ fn take_ticket(opts: &Options, _ticket: &TicketOptions, take: &TakeTicketOptions
   let mut stmt = conn.prepare("
     UPDATE ticket SET owner_id = ?1
     WHERE id = ?2
-    AND (owner_id IS NULL OR owner_id = $3)
+    AND (owner_id IS NULL OR owner_id = ?3 OR ?4 = TRUE)
     RETURNING id",
   )?;
 
   let mut tkts_iter = stmt.query_map(rusqlite::params![
-    agent_id, take.id, agent_id,
+    agent_id, take.id, agent_id, take.force,
   ], |row| {
     Ok(row.get::<usize, i32>(0))
   })?;
