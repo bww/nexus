@@ -20,6 +20,8 @@ pub enum TicketCommand {
   Create(CreateTicketOptions),
   #[clap(name="list", about="List tickets")]
   List(ListTicketOptions),
+  #[clap(name="get", about="Fetch a ticket")]
+  Fetch(FetchTicketOptions),
   #[clap(name="take", about="Take ownership of a ticket")]
   Take(TakeTicketOptions),
   #[clap(name="abandon", about="Abandon tickets owned by an agent")]
@@ -45,6 +47,12 @@ pub struct ListTicketOptions {
 }
 
 #[derive(Args, Debug)]
+pub struct FetchTicketOptions {
+  #[clap(long, help="The ticket to fetch")]
+  id: i32
+}
+
+#[derive(Args, Debug)]
 pub struct TakeTicketOptions {
   #[clap(long, help="The ticket to take ownership of")]
   id: i32,
@@ -62,8 +70,32 @@ pub fn ticket(opts: &Options, ticket: &TicketOptions, conn: Connection) -> Resul
   match &ticket.command {
     TicketCommand::Create(sub)  => create_ticket(opts, ticket, sub, conn),
     TicketCommand::List(sub)    => list_ticket(opts, ticket, sub, conn),
+    TicketCommand::Fetch(sub)   => fetch_ticket(opts, ticket, sub, conn),
     TicketCommand::Take(sub)    => take_ticket(opts, ticket, sub, conn),
     TicketCommand::Abandon(sub) => abandon_ticket(opts, ticket, sub, conn),
+  }
+}
+
+fn ticket_row(conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<ticket::Ticket> + '_ {
+  |row| {
+    let id: i32 = row.get(0)?;
+
+    let mut stmt = conn.prepare("SELECT role FROM ticket_role WHERE ticket_id = ?1")?;
+    let role_iter = stmt.query_map(rusqlite::params![&id], |row| {
+      row.get::<usize, String>(0)
+    })?;
+
+    Ok(ticket::Ticket {
+      id: id,
+      state: row.get(1)?,
+      summary: row.get(2)?,
+      roles: Some(role_iter.collect::<Result<Vec<String>, _>>()?),
+      detail: row.get(4)?,
+      data: row.get(5)?,
+      owner_id: row.get(6)?,
+      created_at: row.get(7)?,
+      updated_at: row.get(8)?,
+    })
   }
 }
 
@@ -147,31 +179,24 @@ fn list_ticket(_opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions
   }
 
   let mut stmt = conn.prepare(&query)?;
-  let tkts_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), |row| {
-    let id: i32 = row.get(0)?;
-
-    let mut stmt = conn.prepare("SELECT role FROM ticket_role WHERE ticket_id = ?1")?;
-    let role_iter = stmt.query_map(rusqlite::params![&id], |row| {
-      row.get::<usize, String>(0)
-    })?;
-
-    Ok(ticket::Ticket {
-      id: id,
-      state: row.get(1)?,
-      summary: row.get(2)?,
-      roles: Some(role_iter.collect::<Result<Vec<String>, _>>()?),
-      detail: row.get(4)?,
-      data: row.get(5)?,
-      owner_id: row.get(6)?,
-      created_at: row.get(7)?,
-      updated_at: row.get(8)?,
-    })
-  })?;
+  let tkts_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), ticket_row(&conn))?;
 
   for tkt in tkts_iter {
     let tkt = tkt?;
     println!("{} {:?}", ticket::format_id(tkt.id), tkt);
   }
+  Ok(())
+}
+
+fn fetch_ticket(_opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  let mut stmt = conn.prepare("
+    SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
+    FROM ticket
+    WHERE id = ?1")?;
+
+  let tkt = stmt.query_one(rusqlite::params![fetch.id], ticket_row(&conn))?;
+
+  println!("{} {:?}", ticket::format_id(tkt.id), tkt);
   Ok(())
 }
 
