@@ -4,6 +4,7 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 
 use crate::error;
+use crate::sqlx::StringVec;
 
 pub mod cmd;
 
@@ -74,6 +75,7 @@ pub fn format_id(id: i32) -> String {
 pub struct Ticket {
   pub id: i32,
   pub state: State,
+  pub roles: Option<Vec<String>>,
   pub summary: String,
   pub detail: Option<String>,
   pub data: Option<Vec<u8>>,
@@ -84,16 +86,25 @@ pub struct Ticket {
 
 impl Ticket {
   pub fn init_db(conn: &rusqlite::Connection) -> Result<(), error::Error> {
-    conn.execute(
-      "CREATE TABLE IF NOT EXISTS ticket (
+    conn.execute("
+      CREATE TABLE IF NOT EXISTS ticket (
         id         INTEGER PRIMARY KEY,
         state      TEXT NOT NULL,
+        roles      TEXT,
         summary    TEXT NOT NULL,
         detail     TEXT,
         data       BLOB,
         owner_id   TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      )",
+      (),
+    )?;
+    conn.execute("
+      CREATE TABLE IF NOT EXISTS ticket_role (
+        ticket_id INTEGER NOT NULL REFERENCES ticket (id),
+        role      TEXT UNIQUE NOT NULL,
+        PRIMARY KEY (ticket_id, role)
       )",
       (),
     )?;
