@@ -3,6 +3,7 @@ use rusqlite::{Connection, Result};
 
 use crate::error;
 use crate::cli;
+use crate::ticket::State;
 use crate::{sql_index, sql_where, sql_list};
 use crate::ticket;
 use crate::Options;
@@ -43,6 +44,8 @@ pub struct ListTicketOptions {
   owner: Option<Vec<String>>,
   #[clap(long, help="Only include issues that can be perfomed by the specified roles")]
   role: Option<Vec<String>>,
+  #[clap(long, help="Only include issues that have one of the specified states")]
+  state: Option<Vec<State>>,
   #[clap(long, help="Only include issues that are assigned to the agent making this request")]
   mine: bool,
   #[clap(long, help="Only include issues that are available")]
@@ -184,6 +187,12 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
     sql_where!(query, args);
     query.push_str("owner_id IN ");
     sql_list!(query, args, owners);
+  }
+
+  if let Some(state) = &list.state {
+    sql_where!(query, args);
+    query.push_str("state IN ");
+    sql_list!(query, args, state);
   }
 
   let mut stmt = conn.prepare(&query)?;
