@@ -40,15 +40,15 @@ pub struct CreateTicketOptions {
 
 #[derive(Args, Debug)]
 pub struct ListTicketOptions {
-  #[clap(long, help="Only include issues owned by any of the specified agents")]
+  #[clap(long, help="Only include tickets owned by any of the specified agents")]
   owner: Option<Vec<String>>,
-  #[clap(long, help="Only include issues that can be perfomed by the specified roles")]
+  #[clap(long, help="Only include tickets that can be perfomed by the specified roles")]
   role: Option<Vec<String>>,
-  #[clap(long, help="Only include issues that have one of the specified states")]
+  #[clap(long, help="Only include tickets that have one of the specified states")]
   state: Option<Vec<State>>,
-  #[clap(long, help="Only include issues that are assigned to the agent making this request")]
+  #[clap(long, help="Only include tickets that are assigned to the agent making this request")]
   mine: bool,
-  #[clap(long, help="Only include issues that are available")]
+  #[clap(long, help="Only include tickets that are available")]
   available: bool,
 }
 
