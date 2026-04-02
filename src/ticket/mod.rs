@@ -2,13 +2,15 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use serde::Serialize;
+use serde_json;
 
+use crate::cli;
 use crate::error;
-use crate::sqlx::StringVec;
 
 pub mod cmd;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum State {
   Available,
   InProgress,
@@ -71,7 +73,7 @@ pub fn format_id(id: i32) -> String {
   format!("#{}", id)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Ticket {
   pub id: i32,
   pub state: State,
@@ -109,5 +111,29 @@ impl Ticket {
       (),
     )?;
     Ok(())
+  }
+
+  pub fn formatted<'a>(&'a self, format: &'a cli::Format) -> cli::Formatted<'a, Ticket> {
+    cli::Formatted { value: self, format }
+  }
+
+  pub fn fmt_text(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{} {}", format_id(self.id), self.summary)
+  }
+
+  pub fn fmt_json(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match serde_json::to_string(self) {
+      Ok(json) => write!(f, "{}", json),
+      Err(_)   => Err(fmt::Error),
+    }
+  }
+}
+
+impl Display for cli::Formatted<'_, Ticket> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self.format {
+      cli::Format::Text => self.value.fmt_text(f),
+      cli::Format::JSON => self.value.fmt_json(f),
+    }
   }
 }

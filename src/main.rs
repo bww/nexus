@@ -5,6 +5,7 @@ use clap::{Parser, Subcommand};
 use rusqlite::{Connection, Result};
 
 mod error;
+mod cli;
 mod sqlx;
 mod agent;
 mod ticket;
@@ -21,8 +22,16 @@ struct Options {
   project: String,
   #[clap(long, help="Path to the database")]
   database: Option<String>,
+  #[clap(long, help="The output format to use")]
+  format: Option<cli::Format>,
   #[clap(subcommand)]
   command: Command,
+}
+
+impl Options {
+  pub fn format(&self) -> cli::Format {
+    self.format.as_ref().unwrap_or(&cli::Format::Text).to_owned()
+  }
 }
 
 #[derive(Subcommand, Debug)]

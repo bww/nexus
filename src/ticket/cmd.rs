@@ -2,6 +2,7 @@ use clap::{Subcommand, Args};
 use rusqlite::{Connection, Result};
 
 use crate::error;
+use crate::cli;
 use crate::{sql_index, sql_where, sql_list};
 use crate::ticket;
 use crate::Options;
@@ -42,6 +43,8 @@ pub struct ListTicketOptions {
   owner: Option<Vec<String>>,
   #[clap(long, help="Only include issues that can be perfomed by the specified roles")]
   role: Option<Vec<String>>,
+  #[clap(long, help="Only include issues that are assigned to the agent making this request")]
+  mine: bool,
   #[clap(long, help="Only include issues that are available")]
   available: bool,
 }
@@ -147,7 +150,7 @@ fn create_ticket(_opts: &Options, _ticket: &TicketOptions, create: &CreateTicket
   Ok(())
 }
 
-fn list_ticket(_opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions, conn: Connection) -> Result<(), error::Error> {
+fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions, conn: Connection) -> Result<(), error::Error> {
   let mut query = "
     SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
     FROM ticket".to_string();
@@ -164,11 +167,16 @@ fn list_ticket(_opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions
     sql_list!(query, args, role);
   }
 
-  if list.available {
+  if list.mine  {
+    sql_where!(query, args);
+    query.push_str(&format!("owner_id = ?{}", sql_index!(args)));
+    args.push(&ticket.agent);
+  }else if list.available {
     sql_where!(query, args);
     query.push_str(&format!("(owner_id IS NULL OR owner_id = ?{})", sql_index!(args)));
     args.push(&ticket.agent);
-    query.push_str(&format!(" AND state = ?{}", sql_index!(args)));
+    sql_where!(query, args);
+    query.push_str(&format!("state = ?{}", sql_index!(args)));
     args.push(&ticket::State::Available);
   }
 
@@ -181,14 +189,21 @@ fn list_ticket(_opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions
   let mut stmt = conn.prepare(&query)?;
   let tkts_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), ticket_row(&conn))?;
 
+  let mut n: i32 = 0;
+  let format = &opts.format();
   for tkt in tkts_iter {
     let tkt = tkt?;
-    println!("{} {:?}", ticket::format_id(tkt.id), tkt);
+    println!("{}", tkt.formatted(format));
+    n += 1;
+  }
+
+  if format == &cli::Format::Text {
+    println!("{} found", n);
   }
   Ok(())
 }
 
-fn fetch_ticket(_opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOptions, conn: Connection) -> Result<(), error::Error> {
+fn fetch_ticket(opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOptions, conn: Connection) -> Result<(), error::Error> {
   let mut stmt = conn.prepare("
     SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
     FROM ticket
@@ -196,7 +211,7 @@ fn fetch_ticket(_opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOpt
 
   let tkt = stmt.query_one(rusqlite::params![fetch.id], ticket_row(&conn))?;
 
-  println!("{} {:?}", ticket::format_id(tkt.id), tkt);
+  println!("{}", tkt.formatted(&opts.format()));
   Ok(())
 }
 

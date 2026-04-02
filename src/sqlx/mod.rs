@@ -1,34 +1,3 @@
-#[derive(Debug)]
-pub struct StringVec(pub Vec<String>);
-
-impl StringVec {
-  pub fn from(val: &Vec<String>) -> Self {
-    StringVec(val.clone())
-  }
-
-  pub fn from_option(val: &Option<Vec<String>>) -> Option<Self> {
-    val.as_ref().map(Self::from)
-  }
-}
-
-impl rusqlite::types::ToSql for StringVec {
-  fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-    let json = serde_json::to_string(&self.0)
-      .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-    Ok(rusqlite::types::ToSqlOutput::Owned(
-      rusqlite::types::Value::Text(json),
-    ))
-  }
-}
-
-impl rusqlite::types::FromSql for StringVec {
-  fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-    let s = value.as_str()?;
-    serde_json::from_str(s)
-      .map(StringVec)
-      .map_err(|e| rusqlite::types::FromSqlError::Other(Box::new(e)))
-  }
-}
 
 #[macro_export]
 macro_rules! sql_index {
