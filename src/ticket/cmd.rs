@@ -195,6 +195,8 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
     sql_list!(query, args, state);
   }
 
+  query.push_str(" ORDER BY updated_at DESC");
+
   let mut stmt = conn.prepare(&query)?;
   let tkts_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), ticket_row(&conn))?;
 
