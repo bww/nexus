@@ -106,7 +106,7 @@ fn ticket_row(conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::
 }
 
 fn create_ticket(_opts: &Options, _ticket: &TicketOptions, create: &CreateTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  let tkt = ticket::Ticket{
+  let val = ticket::Ticket{
     id: 0,
     state: ticket::State::Available,
     summary: create.summary.to_owned(),
@@ -127,17 +127,17 @@ fn create_ticket(_opts: &Options, _ticket: &TicketOptions, create: &CreateTicket
     RETURNING id"
   )?;
 
-  let mut tkts_iter = stmt.query_map(rusqlite::params![
-    &tkt.state, &tkt.summary, &tkt.detail, &tkt.data, &tkt.owner_id, &tkt.created_at, &tkt.updated_at
+  let mut vals_iter = stmt.query_map(rusqlite::params![
+    &val.state, &val.summary, &val.detail, &val.data, &val.owner_id, &val.created_at, &val.updated_at
   ], |row| {
     row.get::<usize, i32>(0)
   })?;
-  let tkt_id = match tkts_iter.next() {
+  let val_id = match vals_iter.next() {
     Some(next) => next?,
     None       => return Err(error::Error::ArgumentError("No identifier returned".to_owned())),
   };
 
-  if let Some(roles) = tkt.roles {
+  if let Some(roles) = val.roles {
     for role in roles {
       conn.execute("
         INSERT INTO ticket_role (
@@ -145,7 +145,7 @@ fn create_ticket(_opts: &Options, _ticket: &TicketOptions, create: &CreateTicket
         ) VALUES (
           ?1, ?2
         )",
-        (&tkt_id, &role),
+        (&val_id, &role),
       )?;
     }
   }
@@ -198,13 +198,13 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
   query.push_str(" ORDER BY updated_at DESC");
 
   let mut stmt = conn.prepare(&query)?;
-  let tkts_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), ticket_row(&conn))?;
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), ticket_row(&conn))?;
 
   let mut n: i32 = 0;
   let format = &opts.format();
-  for tkt in tkts_iter {
-    let tkt = tkt?;
-    println!("{}", tkt.formatted(format));
+  for val in vals_iter {
+    let val = val?;
+    println!("{}", val.formatted(format));
     n += 1;
   }
 
@@ -220,9 +220,9 @@ fn fetch_ticket(opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOpti
     FROM ticket
     WHERE id = ?1")?;
 
-  let tkt = stmt.query_one(rusqlite::params![fetch.id], ticket_row(&conn))?;
+  let val = stmt.query_one(rusqlite::params![fetch.id], ticket_row(&conn))?;
 
-  println!("{}", tkt.formatted(&opts.format()));
+  println!("{}", val.formatted(&opts.format()));
   Ok(())
 }
 
@@ -234,13 +234,13 @@ fn take_ticket(_opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions
     RETURNING id",
   )?;
 
-  let mut tkts_iter = stmt.query_map(rusqlite::params![
+  let mut vals_iter = stmt.query_map(rusqlite::params![
     ticket.agent, take.id, ticket.agent, take.force,
   ], |row| {
     row.get::<usize, i32>(0)
   })?;
 
-  if !match tkts_iter.next() {
+  if !match vals_iter.next() {
     Some(next) => next? == take.id,
     None       => false,
   } {
@@ -274,13 +274,13 @@ fn abandon_ticket(_opts: &Options, ticket: &TicketOptions, abandon: &AbandonTick
     RETURNING id");
 
   let mut stmt = conn.prepare(&query)?;
-  let tkts_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), |row| {
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), |row| {
     row.get::<usize, i32>(0)
   })?;
 
-  for tkt in tkts_iter {
-    let tkt = tkt?;
-    println!("{} is abandoned", ticket::format_id(tkt));
+  for val in vals_iter {
+    let val = val?;
+    println!("{} is abandoned", ticket::format_id(val));
   }
 
   Ok(())

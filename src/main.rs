@@ -40,6 +40,8 @@ enum Command {
   Agent(agent::cmd::AgentOptions),
   #[clap(name="ticket", about="Tickets")]
   Ticket(ticket::cmd::TicketOptions),
+  #[clap(name="note", about="Notes")]
+  Note(note::cmd::NoteOptions),
 }
 
 fn main() {
@@ -66,9 +68,11 @@ fn cmd() -> Result<(), error::Error> {
 
   let conn = Connection::open(&dbpath)?;
   ticket::Ticket::init_db(&conn)?;
+  note::Note::init_db(&conn)?;
 
   match &opts.command {
     Command::Agent(sub)  => agent::cmd::agent(&opts, sub, conn),
     Command::Ticket(sub) => ticket::cmd::ticket(&opts, sub, conn),
+    Command::Note(sub)   => note::cmd::note(&opts, sub, conn),
   }
 }

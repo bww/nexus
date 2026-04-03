@@ -1,5 +1,9 @@
+use std::io;
+use std::fs;
 use std::fmt::{self, Display};
 use std::str::FromStr;
+
+use crate::error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Format {
@@ -29,5 +33,15 @@ impl FromStr for Format {
       "json" => Ok(Format::JSON),
       _      => Err(format!("Invalid format: {}", input)),
     }
+  }
+}
+
+pub fn read_input(from: &Option<String>) -> Result<Option<String>, error::Error> {
+  match from {
+    Some(path) => match path.as_str() {
+      "-" => Ok(Some(io::read_to_string(io::stdin())?)),
+      _   => Ok(Some(fs::read_to_string(path)?)),
+    },
+    None => Ok(None),
   }
 }
