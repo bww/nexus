@@ -90,7 +90,7 @@ impl<'a> TicketSummary<'a> {
   }
 
   pub fn fmt_text(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{} {}", format_id(self.id), self.summary)
+    write!(f, "{}. {}", format_id(self.id), self.summary)
   }
 
   pub fn fmt_json(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -167,7 +167,7 @@ impl Ticket {
   }
 
   pub fn fmt_text(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{} {}", format_id(self.id), self.summary)
+    write!(f, "{}. {}", format_id(self.id), self.summary)
   }
 
   pub fn fmt_json(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

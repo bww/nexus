@@ -161,7 +161,7 @@ fn list_note(opts: &Options, _note: &NoteOptions, list: &ListNoteOptions, conn: 
   let format = &opts.format();
   for val in vals_iter {
     let val = val?;
-    println!("{}", val.formatted(format));
+    println!("{}", val.summary().formatted(format));
     n += 1;
   }
 

@@ -23,7 +23,7 @@ struct Options {
   project: Option<String>,
   #[clap(long, env="NEXUS_DATABASE", help="Path to the database")]
   database: Option<String>,
-  #[clap(long, help="The output format to use")]
+  #[clap(long, env="NEXUS_FORMAT", help="The output format to use")]
   format: Option<cli::Format>,
   #[clap(subcommand)]
   command: Command,

@@ -14,6 +14,42 @@ pub fn format_id(id: i32) -> String {
 }
 
 #[derive(Debug, Serialize)]
+pub struct NoteSummary<'a> {
+  pub id: i32,
+  pub creator_id: &'a String,
+  pub commit_sha: &'a Option<String>,
+  pub summary: &'a String,
+  pub created_at: &'a DateTime<Utc>,
+  pub updated_at: &'a DateTime<Utc>,
+}
+
+impl<'a> NoteSummary<'a> {
+  pub fn formatted<'b>(&'b self, format: &'b cli::Format) -> cli::Formatted<'b, NoteSummary<'b>> {
+    cli::Formatted { value: self, format }
+  }
+
+  pub fn fmt_text(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}. {}", format_id(self.id), self.summary)
+  }
+
+  pub fn fmt_json(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match serde_json::to_string(self) {
+      Ok(json) => write!(f, "{}", json),
+      Err(_)   => Err(fmt::Error),
+    }
+  }
+}
+
+impl Display for cli::Formatted<'_, NoteSummary<'_>> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self.format {
+      cli::Format::Text => self.value.fmt_text(f),
+      cli::Format::JSON => self.value.fmt_json(f),
+    }
+  }
+}
+
+#[derive(Debug, Serialize)]
 pub struct Note {
   pub id: i32,
   pub creator_id: String,
@@ -43,12 +79,23 @@ impl Note {
     Ok(())
   }
 
+  pub fn summary(&self) -> NoteSummary<'_> {
+    NoteSummary{
+      id: self.id,
+      creator_id: &self.creator_id,
+      commit_sha: &self.commit_sha,
+      summary: &self.summary,
+      created_at: &self.created_at,
+      updated_at: &self.updated_at,
+    }
+  }
+
   pub fn formatted<'a>(&'a self, format: &'a cli::Format) -> cli::Formatted<'a, Note> {
     cli::Formatted { value: self, format }
   }
 
   pub fn fmt_text(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "{} {}", format_id(self.id), self.summary)
+    write!(f, "{}. {}", format_id(self.id), self.summary)
   }
 
   pub fn fmt_json(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
