@@ -36,6 +36,8 @@ Always provide the project context when you invoke Nexus. It is provided via the
 $ nexus --project $PROJECT_ROOT # additional commands...
 ```
 
+The project context should be generally clear, it's the root of the project. If for some reason you are not certain what the project context should be, collect it from the user.
+
 ## Your Role
 When you use Nexus to manage tickets or notes you will have a role. Your role will be assigned to you in the prompt. Your role tells you the type of work you can do and you must only ever do work assigned to your role or you will cause problems for other agents that have different roles. If you were not explicitly given a role in your prompt or in subsequent instructions, you have the special role `*`. Whether you have an explicitly provided role or the special default role `*` you should provide your role to Nexus anywhere it accepts a role as a parameter.
 
