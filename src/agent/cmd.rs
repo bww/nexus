@@ -29,7 +29,7 @@ pub fn agent(opts: &Options, agent: &AgentOptions, conn: Connection) -> Result<(
   }
 }
 
-fn create_agent(_opts: &Options, _agent: &AgentOptions, create: &CreateAgentOptions, conn: Connection) -> Result<(), error::Error> {
-  println!(">>> {}", agent::new_agent_id(&create.role));
+fn create_agent(_opts: &Options, _agent: &AgentOptions, create: &CreateAgentOptions, _conn: Connection) -> Result<(), error::Error> {
+  println!("{}", agent::new_agent_id(&create.role));
   Ok(())
 }
