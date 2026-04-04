@@ -12,8 +12,11 @@ pub mod cmd;
 
 #[derive(Debug, Clone, Serialize)]
 pub enum State {
+  #[serde(rename = "available")]
   Available,
+  #[serde(rename = "in_progress")]
   InProgress,
+  #[serde(rename = "done")]
   Done,
 }
 
