@@ -10,7 +10,7 @@ use crate::Options;
 
 #[derive(Args, Debug)]
 pub struct TicketOptions {
-  #[clap(long, help="A unique identifier of the agent operating on the project (use: 'agent new' to assign a new identifier)")]
+  #[clap(long, env="NEXUS_AGENT", help="A unique identifier of the agent operating on the project (use: 'agent new' to assign a new identifier)")]
   agent: String,
   #[clap(subcommand)]
   command: TicketCommand,
@@ -24,6 +24,8 @@ pub enum TicketCommand {
   List(ListTicketOptions),
   #[clap(name="get", about="Fetch a ticket")]
   Fetch(FetchTicketOptions),
+  #[clap(name="update", about="Update a ticket")]
+  Update(UpdateTicketOptions),
   #[clap(name="take", about="Take ownership of a ticket")]
   Take(TakeTicketOptions),
   #[clap(name="abandon", about="Abandon tickets owned by an agent")]
@@ -36,6 +38,8 @@ pub struct CreateTicketOptions {
   role: Option<Vec<String>>,
   #[clap(long, help="A brief summary of the ticket")]
   summary: String,
+  #[clap(long, help="Read the ticket detail content from the specified file; use '-' for STDIN")]
+  detail: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -59,6 +63,18 @@ pub struct FetchTicketOptions {
 }
 
 #[derive(Args, Debug)]
+pub struct UpdateTicketOptions {
+  #[clap(long, help="The ticket to update")]
+  id: i32,
+  #[clap(long, help="The state of the ticket")]
+  state: Option<State>,
+  #[clap(long, help="A brief summary of the note")]
+  summary: Option<String>,
+  #[clap(long, help="Read the note content from the specified file; use '-' for STDIN")]
+  detail: Option<String>,
+}
+
+#[derive(Args, Debug)]
 pub struct TakeTicketOptions {
   #[clap(long, help="The ticket to take ownership of")]
   id: i32,
@@ -77,6 +93,7 @@ pub fn ticket(opts: &Options, ticket: &TicketOptions, conn: Connection) -> Resul
     TicketCommand::Create(sub)  => create_ticket(opts, ticket, sub, conn),
     TicketCommand::List(sub)    => list_ticket(opts, ticket, sub, conn),
     TicketCommand::Fetch(sub)   => fetch_ticket(opts, ticket, sub, conn),
+    TicketCommand::Update(sub)  => update_ticket(opts, ticket, sub, conn),
     TicketCommand::Take(sub)    => take_ticket(opts, ticket, sub, conn),
     TicketCommand::Abandon(sub) => abandon_ticket(opts, ticket, sub, conn),
   }
@@ -105,13 +122,13 @@ fn ticket_row(conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::
   }
 }
 
-fn create_ticket(_opts: &Options, _ticket: &TicketOptions, create: &CreateTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  let val = ticket::Ticket{
+fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  let mut val = ticket::Ticket{
     id: 0,
     state: ticket::State::Available,
     summary: create.summary.to_owned(),
     roles: create.role.to_owned(),
-    detail: None,
+    detail: cli::read_input(&create.detail)?,
     data: None,
     owner_id: None,
     created_at: chrono::Utc::now(),
@@ -137,7 +154,9 @@ fn create_ticket(_opts: &Options, _ticket: &TicketOptions, create: &CreateTicket
     None       => return Err(error::Error::ArgumentError("No identifier returned".to_owned())),
   };
 
-  if let Some(roles) = val.roles {
+  val.id = val_id;
+
+  if let Some(roles) = &val.roles {
     for role in roles {
       conn.execute("
         INSERT INTO ticket_role (
@@ -150,6 +169,7 @@ fn create_ticket(_opts: &Options, _ticket: &TicketOptions, create: &CreateTicket
     }
   }
 
+  println!("{}", val.formatted(&opts.format()));
   Ok(())
 }
 
@@ -204,7 +224,7 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
   let format = &opts.format();
   for val in vals_iter {
     let val = val?;
-    println!("{}", val.formatted(format));
+    println!("{}", val.summary().formatted(format));
     n += 1;
   }
 
@@ -221,6 +241,31 @@ fn fetch_ticket(opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOpti
     WHERE id = ?1")?;
 
   let val = stmt.query_one(rusqlite::params![fetch.id], ticket_row(&conn))?;
+
+  println!("{}", val.formatted(&opts.format()));
+  Ok(())
+}
+
+fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  let mut stmt = conn.prepare("
+    SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
+    FROM ticket
+    WHERE id = ?1")?;
+
+  let mut val = stmt.query_one(rusqlite::params![update.id], ticket_row(&conn))?;
+  val.state = update.state.to_owned().unwrap_or(val.state);
+  val.summary = update.summary.to_owned().unwrap_or(val.summary);
+  val.detail = cli::read_input(&update.detail)?.or(val.detail);
+  val.updated_at = chrono::Utc::now();
+
+  let mut stmt = conn.prepare("
+    UPDATE ticket SET state = ?1, summary = ?2, detail = ?3, updated_at = ?4
+    WHERE id = ?5"
+  )?;
+  stmt.execute(rusqlite::params![
+    &val.state, &val.summary, &val.detail, &val.updated_at,
+    update.id,
+  ])?;
 
   println!("{}", val.formatted(&opts.format()));
   Ok(())

@@ -9,7 +9,7 @@ use crate::Options;
 
 #[derive(Args, Debug)]
 pub struct NoteOptions {
-  #[clap(long, help="A unique identifier of the agent operating on the project (use: 'agent new' to assign a new identifier)")]
+  #[clap(long, env="NEXUS_AGENT", help="A unique identifier of the agent operating on the project (use: 'agent new' to assign a new identifier)")]
   agent: String,
   #[clap(subcommand)]
   command: NoteCommand,
@@ -96,8 +96,8 @@ fn note_row(_conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::R
   }
 }
 
-fn create_note(_opts: &Options, note: &NoteOptions, create: &CreateNoteOptions, conn: Connection) -> Result<(), error::Error> {
-  let val = note::Note{
+fn create_note(opts: &Options, note: &NoteOptions, create: &CreateNoteOptions, conn: Connection) -> Result<(), error::Error> {
+  let mut val = note::Note{
     id: 0,
     creator_id: note.agent.to_owned(),
     commit_sha: create.commit.to_owned(),
@@ -113,12 +113,23 @@ fn create_note(_opts: &Options, note: &NoteOptions, create: &CreateNoteOptions, 
       creator_id, commit_sha, summary, detail, data, created_at, updated_at
     ) VALUES (
       ?1, ?2, ?3, ?4, ?5, ?6, ?7
-    )"
+    )
+    RETURNING id"
   )?;
-  stmt.execute(rusqlite::params![
-    &val.creator_id, &val.commit_sha, &val.summary, &val.detail, &val.data, &val.created_at, &val.updated_at
-  ])?;
 
+  let mut vals_iter = stmt.query_map(rusqlite::params![
+    &val.creator_id, &val.commit_sha, &val.summary, &val.detail, &val.data, &val.created_at, &val.updated_at
+  ], |row| {
+    row.get::<usize, i32>(0)
+  })?;
+  let val_id = match vals_iter.next() {
+    Some(next) => next?,
+    None       => return Err(error::Error::ArgumentError("No identifier returned".to_owned())),
+  };
+
+  val.id = val_id;
+
+  println!("{}", val.formatted(&opts.format()));
   Ok(())
 }
 
