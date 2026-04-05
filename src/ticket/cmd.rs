@@ -101,29 +101,6 @@ pub fn ticket(opts: &Options, ticket: &TicketOptions, conn: Connection) -> Resul
   }
 }
 
-fn ticket_row(conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<ticket::Ticket> + '_ {
-  |row| {
-    let id: i32 = row.get(0)?;
-
-    let mut stmt = conn.prepare("SELECT role FROM ticket_role WHERE ticket_id = ?1")?;
-    let role_iter = stmt.query_map(rusqlite::params![&id], |row| {
-      row.get::<usize, String>(0)
-    })?;
-
-    Ok(ticket::Ticket {
-      id: id,
-      state: row.get(1)?,
-      summary: row.get(2)?,
-      roles: Some(role_iter.collect::<Result<Vec<String>, _>>()?),
-      detail: row.get(4)?,
-      data: row.get(5)?,
-      owner_id: row.get(6)?,
-      created_at: row.get(7)?,
-      updated_at: row.get(8)?,
-    })
-  }
-}
-
 fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketOptions, conn: Connection) -> Result<(), error::Error> {
   let mut val = ticket::Ticket{
     id: 0,
@@ -209,7 +186,7 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
   }
 
   let mut stmt = conn.prepare(&query.sql)?;
-  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket_row(&conn))?;
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket::from_row(&conn))?;
 
   let mut n: i32 = 0;
   let format = &opts.format();
@@ -225,35 +202,33 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
   Ok(())
 }
 
-fn ticket_with_id(_opts: &Options, _ticket: &TicketOptions, id: i32, conn: &Connection) -> Result<ticket::Ticket, error::Error> {
-  let mut stmt = conn.prepare("
-    SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
-    FROM ticket
-    WHERE id = ?1")?;
-
-  Ok(stmt.query_one(rusqlite::params![id], ticket_row(&conn))?)
-}
-
-fn fetch_ticket(opts: &Options, ticket: &TicketOptions, fetch: &FetchTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  println!("{}", ticket_with_id(opts, ticket, fetch.id, &conn)?.formatted(&opts.format()));
+fn fetch_ticket(opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  println!("{}", ticket::fetch(&conn, fetch.id)?.formatted(&opts.format()));
   Ok(())
 }
 
-fn update_ticket(opts: &Options, ticket: &TicketOptions, update: &UpdateTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  let mut val = ticket_with_id(opts, ticket, update.id, &conn)?;
+fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  let mut val = ticket::fetch(&conn, update.id)?;
   val.state = update.state.to_owned().unwrap_or(val.state);
   val.summary = update.summary.to_owned().unwrap_or(val.summary);
   val.detail = cli::read_input(&update.detail)?.or(val.detail);
   val.updated_at = chrono::Utc::now();
 
-  let mut stmt = conn.prepare("
-    UPDATE ticket SET state = ?1, summary = ?2, detail = ?3, updated_at = ?4
-    WHERE id = ?5"
-  )?;
-  stmt.execute(rusqlite::params![
-    &val.state, &val.summary, &val.detail, &val.updated_at,
-    update.id,
-  ])?;
+  let mut query = sqlx::Query::new();
+  query
+    .push("UPDATE ticket SET")
+    .push(" state = ").push_var(val.state.to_owned())
+    .push(", summary = ").push_var(val.summary.to_owned())
+    .push(", detail = ").push_var(val.detail.to_owned())
+    .push(", updated_at = ").push_var(val.updated_at)
+    .push_where("id = ").push_var(update.id);
+
+  if opts.debug {
+    eprintln!("query: {}", &query);
+  }
+
+  let mut stmt = conn.prepare(&query.sql)?;
+  stmt.execute(rusqlite::params_from_iter(query.args))?;
 
   println!("{}", val.formatted(&opts.format()));
   Ok(())
@@ -272,7 +247,7 @@ fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions,
   }
 
   let mut stmt = conn.prepare(&query.sql)?;
-  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket_row(&conn))?;
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket::from_row(&conn))?;
 
   let mut taken = Vec::new();
   for val in vals_iter {
@@ -312,7 +287,7 @@ fn abandon_ticket(opts: &Options, ticket: &TicketOptions, abandon: &AbandonTicke
   }
 
   let mut stmt = conn.prepare(&query.sql)?;
-  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket_row(&conn))?;
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket::from_row(&conn))?;
   for val in vals_iter {
     let val = val?;
     match &opts.format() {

@@ -2,12 +2,14 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 use std::borrow::Borrow;
 
+use rusqlite::{Connection, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json;
 
 use crate::cli;
 use crate::error;
+use crate::Options;
 
 pub mod cmd;
 
@@ -200,4 +202,36 @@ impl Display for cli::Formatted<'_, Ticket> {
       cli::Format::JSON => self.value.fmt_json(f),
     }
   }
+}
+
+fn from_row(conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<Ticket> + '_ {
+  |row| {
+    let id: i32 = row.get(0)?;
+
+    let mut stmt = conn.prepare("SELECT role FROM ticket_role WHERE ticket_id = ?1")?;
+    let role_iter = stmt.query_map(rusqlite::params![&id], |row| {
+      row.get::<usize, String>(0)
+    })?;
+
+    Ok(Ticket {
+      id: id,
+      state: row.get(1)?,
+      summary: row.get(2)?,
+      roles: Some(role_iter.collect::<Result<Vec<String>, _>>()?),
+      detail: row.get(4)?,
+      data: row.get(5)?,
+      owner_id: row.get(6)?,
+      created_at: row.get(7)?,
+      updated_at: row.get(8)?,
+    })
+  }
+}
+
+fn fetch(conn: &Connection, id: i32) -> Result<Ticket, error::Error> {
+  let mut stmt = conn.prepare("
+    SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
+    FROM ticket
+    WHERE id = ?1")?;
+
+  Ok(stmt.query_one(rusqlite::params![id], from_row(&conn))?)
 }
