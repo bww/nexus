@@ -225,25 +225,22 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
   Ok(())
 }
 
-fn fetch_ticket(opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOptions, conn: Connection) -> Result<(), error::Error> {
+fn ticket_with_id(_opts: &Options, _ticket: &TicketOptions, id: i32, conn: &Connection) -> Result<ticket::Ticket, error::Error> {
   let mut stmt = conn.prepare("
     SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
     FROM ticket
     WHERE id = ?1")?;
 
-  let val = stmt.query_one(rusqlite::params![fetch.id], ticket_row(&conn))?;
+  Ok(stmt.query_one(rusqlite::params![id], ticket_row(&conn))?)
+}
 
-  println!("{}", val.formatted(&opts.format()));
+fn fetch_ticket(opts: &Options, ticket: &TicketOptions, fetch: &FetchTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  println!("{}", ticket_with_id(opts, ticket, fetch.id, &conn)?.formatted(&opts.format()));
   Ok(())
 }
 
-fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  let mut stmt = conn.prepare("
-    SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
-    FROM ticket
-    WHERE id = ?1")?;
-
-  let mut val = stmt.query_one(rusqlite::params![update.id], ticket_row(&conn))?;
+fn update_ticket(opts: &Options, ticket: &TicketOptions, update: &UpdateTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  let mut val = ticket_with_id(opts, ticket, update.id, &conn)?;
   val.state = update.state.to_owned().unwrap_or(val.state);
   val.summary = update.summary.to_owned().unwrap_or(val.summary);
   val.detail = cli::read_input(&update.detail)?.or(val.detail);
