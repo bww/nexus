@@ -217,7 +217,7 @@ fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketO
   let mut query = sqlx::Query::new();
   query
     .push("UPDATE ticket SET")
-    .push(" state = ").push_var(val.state.to_owned())
+    .push("  state = ").push_var(val.state.to_owned())
     .push(", summary = ").push_var(val.summary.to_owned())
     .push(", detail = ").push_var(val.detail.to_owned())
     .push(", updated_at = ").push_var(val.updated_at)
