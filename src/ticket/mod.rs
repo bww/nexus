@@ -1,5 +1,6 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
+use std::borrow::Borrow;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -74,6 +75,17 @@ impl rusqlite::types::ToSql for State {
 
 pub fn format_id(id: i32) -> String {
   format!("#{}", id)
+}
+
+pub fn format_ids<T: Borrow<i32>>(ids: &[T]) -> String {
+  let mut buf = String::new();
+  for id in ids {
+    if buf.len() > 0 {
+      buf.push_str(", ");
+    }
+    buf.push_str(&format_id(*id.borrow()));
+  }
+  buf
 }
 
 #[derive(Debug, Serialize)]

@@ -16,6 +16,7 @@ pub enum Error {
   RusqliteError(rusqlite::Error),
   DiscoverProjectError(String),
   ArgumentError(String),
+  StateError(String),
 }
 
 impl From<str::Utf8Error> for Error {
@@ -64,6 +65,7 @@ impl fmt::Display for Error {
       Self::RusqliteError(err) => err.fmt(f),
       Self::DiscoverProjectError(err) => err.fmt(f),
       Self::ArgumentError(msg) => write!(f, "{}", msg),
+      Self::StateError(msg) => write!(f, "{}", msg),
     }
   }
 }

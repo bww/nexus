@@ -16,6 +16,15 @@ pub struct Formatted<'a, T> {
   pub format: &'a Format,
 }
 
+impl<'a, T> Formatted<'a, T> {
+  pub fn from(value: &'a T, format: &'a Format) -> Formatted<'a, T> {
+    Formatted {
+      value,
+      format,
+    }
+  }
+}
+
 impl Display for Format {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {

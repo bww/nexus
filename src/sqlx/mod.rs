@@ -1,10 +1,4 @@
-
-#[macro_export]
-macro_rules! sql_index {
-  ($args:expr) => {
-    $args.len() + 1
-  };
-}
+use rusqlite;
 
 #[macro_export]
 macro_rules! sql_where {
@@ -32,4 +26,56 @@ macro_rules! sql_list {
     }
     $query.push_str(")");
   };
+}
+
+#[macro_export]
+macro_rules! sql_var {
+  ($query:expr, $args:expr, $arg:expr) => {
+    $query.push_str(&format!("?{}", ($args.len() + 1)));
+    $args.push($arg);
+  };
+}
+
+pub struct Query {
+  pub sql: String,
+  pub args: Vec<Box<dyn rusqlite::types::ToSql>>,
+}
+
+impl Query {
+  pub fn new() -> Self {
+    Query{
+      sql: String::new(),
+      args: Vec::new(),
+    }
+  }
+
+  pub fn push(&mut self, query: &str) -> &mut Self {
+    self.sql.push_str(query);
+    self
+  }
+
+  pub fn push_where(&mut self, tail: &str) -> &mut Self {
+    sql_where!(self.sql, self.args);
+    self.sql.push_str(tail);
+    self
+  }
+
+  pub fn push_var<T: rusqlite::types::ToSql + 'static>(&mut self, arg: T) -> &mut Self {
+    self.sql.push_str(&format!("?{}", self.args.len() + 1));
+    self.args.push(Box::new(arg));
+    self
+  }
+
+  pub fn push_list<T: rusqlite::types::ToSql + Clone + 'static>(&mut self, list: &[T]) -> &mut Self {
+    self.sql.push_str("(");
+    for (i, elem) in list.iter().enumerate() {
+      if i > 0 {
+        self.sql.push_str(", ");
+      }
+      self.sql.push_str(&format!("?{}", self.args.len() + 1));
+      self.args.push(Box::new(elem.clone()));
+    }
+    self.sql.push_str(")");
+    self
+  }
 }

@@ -7,7 +7,7 @@ Nexus is used to operate on the following things:
 
 ## Tickets
 * Create new tickets that describe work that you or another agent will do later,
-* Find tickets that you can work on, that you are assigned, or filtered by some other critera,
+* Find tickets that you can work on, that you are assigned, or filtered by some other criteria,
 * Update the status of tickets that are in progress or completed.
 
 ## Notes
@@ -31,10 +31,10 @@ $ nexus ticket new --help
 ## Command Output
 By default, output is formatted as JSON. When more than one record is produced by a single command there is one record per line. Sometimes there is also a summary line at the very end.
 
-A text output option is also supported. This 
+A text output option is also supported.
 
 ## The Project Context
-When you use Nexus, you are operating on a specific project context. This context is identified by a path on disk. By default, this path is the root of the Git repository you are in, or failing that, the current directory. If you are given a specific project context, provide it to Nexus. Otherwise, you may allow Nexus to auto-discover the default repo project context. If for some reason you suspect the default project context will not be what the user intends, collect the project context explicitly from from the user.
+When you use Nexus, you are operating on a specific project context. This context is identified by a path on disk. By default, this path is the root of the Git repository you are in, or failing that, the current directory. If you are given a specific project context, provide it to Nexus. Otherwise, you may allow Nexus to auto-discover the default repo project context. If for some reason you suspect the default project context will not be what the user intends, collect the project context explicitly from the user.
 
 You can provide the project context path via the `--project` flag or by setting the environment variable `NEXUS_PROJECT=$path`; for example:
 ```

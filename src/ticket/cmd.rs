@@ -1,10 +1,12 @@
+use std::collections::HashSet;
+
 use clap::{Subcommand, Args};
 use rusqlite::{Connection, Result};
 
 use crate::error;
 use crate::cli;
 use crate::ticket::State;
-use crate::{sql_index, sql_where, sql_list};
+use crate::sqlx;
 use crate::ticket;
 use crate::Options;
 
@@ -28,7 +30,7 @@ pub enum TicketCommand {
   Update(UpdateTicketOptions),
   #[clap(name="take", about="Take ownership of a ticket")]
   Take(TakeTicketOptions),
-  #[clap(name="abandon", about="Abandon tickets owned by an agent")]
+  #[clap(name="abandon", about="Abandon tickets currently owned by an agent that could not be completed so that another agent may take them")]
   Abandon(AbandonTicketOptions),
 }
 
@@ -76,8 +78,8 @@ pub struct UpdateTicketOptions {
 
 #[derive(Args, Debug)]
 pub struct TakeTicketOptions {
-  #[clap(long, help="The ticket to take ownership of")]
-  id: i32,
+  #[clap(long, help="The tickets to take ownership of; specify repeatedly for multiple tickets")]
+  id: Vec<i32>,
   #[clap(long, help="Take ownership even if the ticket is already owned by another agent (this should only be used to resolve proven coordination failures)")]
   force: bool
 }
@@ -174,51 +176,36 @@ fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketO
 }
 
 fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  let mut query = "
+  let mut query = sqlx::Query::new();
+  query.push("
     SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
-    FROM ticket".to_string();
-
-  let mut args: Vec<&dyn rusqlite::types::ToSql> = vec![];
+    FROM ticket");
 
   if let Some(role) = &list.role {
-    query.push_str("
-      INNER JOIN ticket_role
-      ON ticket_role.ticket_id = ticket.id"
-    );
-    sql_where!(query, args);
-    query.push_str("ticket_role.role IN ");
-    sql_list!(query, args, role);
+    query
+      .push(" INNER JOIN ticket_role ON ticket_role.ticket_id = ticket.id")
+      .push_where("ticket_role.role IN ").push_list(role);
   }
 
   if list.mine  {
-    sql_where!(query, args);
-    query.push_str(&format!("owner_id = ?{}", sql_index!(args)));
-    args.push(&ticket.agent);
+    query.push_where("owner_id = ").push_var(ticket.agent.to_owned());
   }else if list.available {
-    sql_where!(query, args);
-    query.push_str(&format!("(owner_id IS NULL OR owner_id = ?{})", sql_index!(args)));
-    args.push(&ticket.agent);
-    sql_where!(query, args);
-    query.push_str(&format!("state = ?{}", sql_index!(args)));
-    args.push(&ticket::State::Available);
+    query
+      .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(")")
+      .push_where("state = ").push_var(ticket::State::Available).push(")");
   }
 
   if let Some(owners) = &list.owner {
-    sql_where!(query, args);
-    query.push_str("owner_id IN ");
-    sql_list!(query, args, owners);
+    query.push_where("owner_id IN ").push_list(owners);
   }
-
   if let Some(state) = &list.state {
-    sql_where!(query, args);
-    query.push_str("state IN ");
-    sql_list!(query, args, state);
+    query.push_where("state IN ").push_list(state);
   }
 
-  query.push_str(" ORDER BY updated_at DESC");
+  query.push(" ORDER BY updated_at DESC");
 
-  let mut stmt = conn.prepare(&query)?;
-  let vals_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), ticket_row(&conn))?;
+  let mut stmt = conn.prepare(&query.sql)?;
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket_row(&conn))?;
 
   let mut n: i32 = 0;
   let format = &opts.format();
@@ -271,61 +258,58 @@ fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketO
   Ok(())
 }
 
-fn take_ticket(_opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  let mut stmt = conn.prepare("
-    UPDATE ticket SET owner_id = ?1
-    WHERE id = ?2
-    AND (owner_id IS NULL OR owner_id = ?3 OR ?4 = TRUE)
-    RETURNING id",
-  )?;
+fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  let mut query = sqlx::Query::new();
+  query
+    .push("UPDATE ticket SET owner_id = ?1")
+    .push_where("id IN ").push_list(&take.id)
+    .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(" OR ").push_var(take.force).push(" = TRUE)")
+    .push(" RETURNING id, state, summary, roles, detail, data, owner_id, created_at, updated_at");
 
-  let mut vals_iter = stmt.query_map(rusqlite::params![
-    ticket.agent, take.id, ticket.agent, take.force,
-  ], |row| {
-    row.get::<usize, i32>(0)
-  })?;
+  let mut stmt = conn.prepare(&query.sql)?;
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket_row(&conn))?;
 
-  if !match vals_iter.next() {
-    Some(next) => next? == take.id,
-    None       => false,
-  } {
-    return Err(error::Error::ArgumentError(format!("Ticket {} is already taken by {}", ticket::format_id(take.id), ticket.agent).to_owned()));
+  let mut taken = Vec::new();
+  for val in vals_iter {
+    let val = val?;
+    taken.push(val.id);
+    match &opts.format() {
+      cli::Format::JSON => println!("{}", cli::Formatted::from(&val, &cli::Format::JSON)),
+      cli::Format::Text => println!("{} owns ticket {}", ticket.agent, ticket::format_ids(&take.id)),
+    }
+  };
+
+  let take_set: HashSet<_> = (&take.id).into_iter().collect();
+  let took_set: HashSet<_> = (&taken).into_iter().collect();
+  let missing: Vec<&i32> = take_set.difference(&took_set).cloned().collect();
+
+  if !missing.is_empty() {
+    eprintln!("warning: could not take: {}", ticket::format_ids(&missing))
   }
-
-  println!("{} owns ticket {}", ticket.agent, ticket::format_id(take.id));
   Ok(())
 }
 
-fn abandon_ticket(_opts: &Options, ticket: &TicketOptions, abandon: &AbandonTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  let mut query = "
-    UPDATE ticket SET owner_id = NULL
-    WHERE owner_id = ?1
-    AND state IN (?2, ?3)".to_string();
-
-  let mut args: Vec<&dyn rusqlite::types::ToSql> = vec![
-    &ticket.agent,
-     // only incomplete tickets are abandoned
-    &ticket::State::Available,
-    &ticket::State::InProgress,
-  ];
+fn abandon_ticket(opts: &Options, ticket: &TicketOptions, abandon: &AbandonTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  let mut query = sqlx::Query::new();
+  query
+    .push("UPDATE ticket SET owner_id = NULL")
+    .push_where("owner_id = ").push_var(ticket.agent.to_owned())
+    .push_where("state NOT IN ").push_list(&[State::Done]);
 
   if let Some(ids) = &abandon.id {
-    sql_where!(query, args);
-    query.push_str("id IN ");
-    sql_list!(query, args, ids);
+    query.push_where("id IN ").push_list(ids);
   }
 
-  query.push_str("
-    RETURNING id");
+  query.push(" RETURNING id, state, summary, roles, detail, data, owner_id, created_at, updated_at");
 
-  let mut stmt = conn.prepare(&query)?;
-  let vals_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), |row| {
-    row.get::<usize, i32>(0)
-  })?;
-
+  let mut stmt = conn.prepare(&query.sql)?;
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket_row(&conn))?;
   for val in vals_iter {
     let val = val?;
-    println!("{} is abandoned", ticket::format_id(val));
+    match &opts.format() {
+      cli::Format::JSON => println!("{}", cli::Formatted::from(&val, &cli::Format::JSON)),
+      cli::Format::Text => println!("{} is abandoned", ticket::format_id(val.id)),
+    }
   }
 
   Ok(())
