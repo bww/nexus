@@ -1,3 +1,5 @@
+use std::fmt;
+
 use rusqlite;
 
 #[macro_export]
@@ -77,5 +79,11 @@ impl Query {
     }
     self.sql.push_str(")");
     self
+  }
+}
+
+impl fmt::Display for Query {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{}", &self.sql)
   }
 }

@@ -204,6 +204,10 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
 
   query.push(" ORDER BY updated_at DESC");
 
+  if opts.debug {
+    eprintln!("query: {}", &query);
+  }
+
   let mut stmt = conn.prepare(&query.sql)?;
   let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket_row(&conn))?;
 
@@ -266,6 +270,10 @@ fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions,
     .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(" OR ").push_var(take.force).push(" = TRUE)")
     .push(" RETURNING id, state, summary, roles, detail, data, owner_id, created_at, updated_at");
 
+  if opts.debug {
+    eprintln!("query: {}", &query);
+  }
+
   let mut stmt = conn.prepare(&query.sql)?;
   let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket_row(&conn))?;
 
@@ -301,6 +309,10 @@ fn abandon_ticket(opts: &Options, ticket: &TicketOptions, abandon: &AbandonTicke
   }
 
   query.push(" RETURNING id, state, summary, roles, detail, data, owner_id, created_at, updated_at");
+
+  if opts.debug {
+    eprintln!("query: {}", &query);
+  }
 
   let mut stmt = conn.prepare(&query.sql)?;
   let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), ticket_row(&conn))?;
