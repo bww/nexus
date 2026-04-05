@@ -41,6 +41,7 @@ macro_rules! sql_var {
 pub struct Query {
   pub sql: String,
   pub args: Vec<Box<dyn rusqlite::types::ToSql>>,
+  n_where: usize,
 }
 
 impl Query {
@@ -48,6 +49,7 @@ impl Query {
     Query{
       sql: String::new(),
       args: Vec::new(),
+      n_where: 0,
     }
   }
 
@@ -57,7 +59,12 @@ impl Query {
   }
 
   pub fn push_where(&mut self, tail: &str) -> &mut Self {
-    sql_where!(self.sql, self.args);
+    if self.n_where == 0 {
+      self.sql.push_str(" WHERE ");
+    } else {
+      self.sql.push_str(" AND ");
+    }
+    self.n_where += 1;
     self.sql.push_str(tail);
     self
   }

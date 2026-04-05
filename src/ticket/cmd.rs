@@ -265,7 +265,7 @@ fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketO
 fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions, conn: Connection) -> Result<(), error::Error> {
   let mut query = sqlx::Query::new();
   query
-    .push("UPDATE ticket SET owner_id = ?1")
+    .push("UPDATE ticket SET owner_id = ").push_var(ticket.agent.to_owned())
     .push_where("id IN ").push_list(&take.id)
     .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(" OR ").push_var(take.force).push(" = TRUE)")
     .push(" RETURNING id, state, summary, roles, detail, data, owner_id, created_at, updated_at");
