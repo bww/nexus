@@ -27,10 +27,14 @@ for i; do
   esac
 done
 
-export NEXUS_PROJECT
 export NEXUS_ROLE
 export NEXUS_AGENT=$($NEXUS agent new --role $NEXUS_ROLE)
 
+project_dir="$(mktemp -d)"
+trap "rm -r ${project_dir}" EXIT
+export NEXUS_PROJECT="${project_dir}"
+
+echo "project: $NEXUS_PROJECT"
 echo "agent: $NEXUS_AGENT"
 
-$NEXUS help
+$NEXUS ticket list
