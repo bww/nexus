@@ -7,6 +7,9 @@ me="$0"
 me_home=$(dirname "$0")
 me_home=$(cd "$me_home" && pwd)
 
+# import assert utils
+. "$me_home/assert.sh"
+
 NEXUS=${NEXUS:-nexus}
 NEXUS_ROLE=${NEXUS_ROLE:-tester}
 NEXUS_PROJECT=${NEXUS_PROJECT}
@@ -37,4 +40,14 @@ export NEXUS_PROJECT="${project_dir}"
 echo "project: $NEXUS_PROJECT"
 echo "agent: $NEXUS_AGENT"
 
-$NEXUS ticket list
+# empty state to start
+assert_equal $($NEXUS ticket list | jq -sc 'map(.id) | sort') '[]'
+
+# add two tickets
+$NEXUS ticket new --summary "This is the first ticket we've created"
+$NEXUS ticket new --summary "This is the second ticket we've created"
+read_eof expect <<EOF
+{"id":1,"summary":"This is the first ticket we've created","owner_id":null,"roles":[]}
+{"id":2,"summary":"This is the second ticket we've created","owner_id":null,"roles":[]}
+EOF
+assert_equal "$expect" "$($NEXUS ticket list | jq -scr 'sort_by(.id) | .[] | {id: .id, summary: .summary, owner_id: .owner_id, roles: .roles}')"
