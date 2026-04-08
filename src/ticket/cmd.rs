@@ -61,13 +61,15 @@ pub struct ListTicketOptions {
 #[derive(Args, Debug)]
 pub struct FetchTicketOptions {
   #[clap(long, help="The ticket to fetch")]
-  id: i32
+  id: Vec<i32>
 }
 
 #[derive(Args, Debug)]
 pub struct UpdateTicketOptions {
   #[clap(long, help="The ticket to update")]
   id: i32,
+  #[clap(long, help="The roles the ticket may be performed by")]
+  role: Option<Vec<String>>,
   #[clap(long, help="The state of the ticket")]
   state: Option<State>,
   #[clap(long, help="A brief summary of the note")]
@@ -101,7 +103,7 @@ pub fn ticket(opts: &Options, ticket: &TicketOptions, conn: Connection) -> Resul
   }
 }
 
-fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketOptions, conn: Connection) -> Result<(), error::Error> {
+fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketOptions, mut conn: Connection) -> Result<(), error::Error> {
   let mut val = ticket::Ticket{
     id: 0,
     state: ticket::State::Available,
@@ -114,40 +116,45 @@ fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketO
     updated_at: chrono::Utc::now(),
   };
 
-  let mut stmt = conn.prepare("
-    INSERT INTO ticket (
-      state, summary, detail, data, owner_id, created_at, updated_at
-    ) VALUES (
-      ?1, ?2, ?3, ?4, ?5, ?6, ?7
-    )
-    RETURNING id"
-  )?;
+  let tx = conn.transaction()?;
 
-  let mut vals_iter = stmt.query_map(rusqlite::params![
-    &val.state, &val.summary, &val.detail, &val.data, &val.owner_id, &val.created_at, &val.updated_at
-  ], |row| {
-    row.get::<usize, i32>(0)
-  })?;
-  let val_id = match vals_iter.next() {
-    Some(next) => next?,
-    None       => return Err(error::Error::ArgumentError("No identifier returned".to_owned())),
-  };
+  {
+    let mut stmt = tx.prepare("
+      INSERT INTO ticket (
+        state, summary, detail, data, owner_id, created_at, updated_at
+      ) VALUES (
+        ?1, ?2, ?3, ?4, ?5, ?6, ?7
+      )
+      RETURNING id"
+    )?;
 
-  val.id = val_id;
+    let mut vals_iter = stmt.query_map(rusqlite::params![
+      &val.state, &val.summary, &val.detail, &val.data, &val.owner_id, &val.created_at, &val.updated_at
+    ], |row| {
+      row.get::<usize, i32>(0)
+    })?;
+    let val_id = match vals_iter.next() {
+      Some(next) => next?,
+      None       => return Err(error::Error::ArgumentError("No identifier returned".to_owned())),
+    };
+
+    val.id = val_id;
+  }
 
   if let Some(roles) = &val.roles {
     for role in roles {
-      conn.execute("
+      tx.execute("
         INSERT INTO ticket_role (
           ticket_id, role
         ) VALUES (
           ?1, ?2
         )",
-        (&val_id, &role),
+        rusqlite::params![&val.id, &role],
       )?;
     }
   }
 
+  tx.commit()?;
   println!("{}", val.formatted(&opts.format()));
   Ok(())
 }
@@ -164,12 +171,16 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
       .push_where("ticket_role.role IN ").push_list(role);
   }
 
-  if list.mine  {
+  if list.mine && list.available {
+    query
+      .push_where("owner_id = ").push_var(ticket.agent.to_owned())
+      .push_where("state = ").push_var(ticket::State::Available);
+  }else if list.mine {
     query.push_where("owner_id = ").push_var(ticket.agent.to_owned());
   }else if list.available {
     query
       .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(")")
-      .push_where("state = ").push_var(ticket::State::Available).push(")");
+      .push_where("state = ").push_var(ticket::State::Available);
   }
 
   if let Some(owners) = &list.owner {
@@ -203,16 +214,21 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
 }
 
 fn fetch_ticket(opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOptions, conn: Connection) -> Result<(), error::Error> {
-  println!("{}", ticket::fetch(&conn, fetch.id)?.formatted(&opts.format()));
+  for id in &fetch.id {
+    println!("{}", ticket::fetch(&conn, *id)?.formatted(&opts.format()));
+  }
   Ok(())
 }
 
-fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketOptions, conn: Connection) -> Result<(), error::Error> {
+fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketOptions, mut conn: Connection) -> Result<(), error::Error> {
   let mut val = ticket::fetch(&conn, update.id)?;
+  val.roles = update.role.to_owned().or(val.roles);
   val.state = update.state.to_owned().unwrap_or(val.state);
   val.summary = update.summary.to_owned().unwrap_or(val.summary);
   val.detail = cli::read_input(&update.detail)?.or(val.detail);
   val.updated_at = chrono::Utc::now();
+
+  let tx = conn.transaction()?;
 
   let mut query = sqlx::Query::new();
   query
@@ -227,9 +243,28 @@ fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketO
     eprintln!("query: {}", &query);
   }
 
-  let mut stmt = conn.prepare(&query.sql)?;
-  stmt.execute(rusqlite::params_from_iter(query.args))?;
+  if let Some(roles) = &update.role {
+    tx.execute("
+      DELETE FROM ticket_role
+      WHERE ticket_id = ?1",
+      rusqlite::params![&val.id],
+    )?;
+    for role in roles {
+      tx.execute("
+        INSERT INTO ticket_role (
+          ticket_id, role
+        ) VALUES (
+          ?1, ?2
+        )",
+        rusqlite::params![&val.id, &role],
+      )?;
+    }
+  }
 
+  tx.prepare(&query.sql)?.
+    execute(rusqlite::params_from_iter(query.args))?;
+
+  tx.commit()?;
   println!("{}", val.formatted(&opts.format()));
   Ok(())
 }

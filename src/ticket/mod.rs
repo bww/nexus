@@ -9,7 +9,6 @@ use serde_json;
 
 use crate::cli;
 use crate::error;
-use crate::Options;
 
 pub mod cmd;
 
