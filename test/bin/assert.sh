@@ -46,6 +46,23 @@ current_line() {
   fi
 }
 
+# run a command and assert a particular exit status
+assert_status () {
+  if [ -z "$1" ]; then
+    echo "assert: no status specified; use: assert_status <status> <command>"
+    exit 1
+  fi
+  expect=$1; shift
+  set +e
+  $*
+  actual=$?
+  set -e
+  if [[ "$expect" -ne "$actual" ]]; then
+    echo -e "assert: not equal @ $(current_line)\n    expected: $expect\n         got: $actual"
+    exit 1
+  fi
+}
+
 # assert an empty string
 assert_empty () {
   if [ ! -z "$1" ]; then

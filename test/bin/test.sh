@@ -33,6 +33,8 @@ done
 export NEXUS_ROLE
 export NEXUS_AGENT=$($NEXUS agent new --role $NEXUS_ROLE)
 
+another_agent=$($NEXUS agent new --role another)
+
 project_dir="$(mktemp -d)"
 trap "rm -r ${project_dir}" EXIT
 export NEXUS_PROJECT="${project_dir}"
@@ -82,5 +84,22 @@ assert_equal "$expect" "$actual"
 actual="$($NEXUS ticket take --id 1 | jq -scr '.[] | {id: .id, summary: .summary, owner_id: .owner_id, roles: .roles}')"
 read_eof expect <<EOF
 {"id":1,"summary":"This is the first ticket we've created","owner_id":"${NEXUS_AGENT}","roles":[]}
+EOF
+assert_equal "$expect" "$actual"
+
+# take a ticket (using another persona)
+actual="$($NEXUS ticket --agent $another_agent take --id 2 | jq -scr '.[] | {id: .id, summary: .summary, owner_id: .owner_id, roles: .roles}')"
+read_eof expect <<EOF
+{"id":2,"summary":"This is the second ticket we've created","owner_id":"${another_agent}","roles":["reviewer"]}
+EOF
+assert_equal "$expect" "$actual"
+
+# take a ticket that is owned by someone else, which is not allowed
+assert_status 1 $NEXUS ticket take --id 2
+
+# take a ticket by force
+actual="$($NEXUS ticket take --id 2 --force | jq -scr '.[] | {id: .id, summary: .summary, owner_id: .owner_id, roles: .roles}')"
+read_eof expect <<EOF
+{"id":2,"summary":"This is the second ticket we've created","owner_id":"${NEXUS_AGENT}","roles":["reviewer"]}
 EOF
 assert_equal "$expect" "$actual"

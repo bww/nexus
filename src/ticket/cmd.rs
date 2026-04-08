@@ -264,7 +264,7 @@ fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions,
   let missing: Vec<&i32> = take_set.difference(&took_set).cloned().collect();
 
   if !missing.is_empty() {
-    eprintln!("warning: could not take: {}", ticket::format_ids(&missing))
+    return Err(error::Error::CommandError(format!("warning: could not take: {}", ticket::format_ids(&missing))));
   }
   Ok(())
 }
