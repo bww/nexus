@@ -150,6 +150,14 @@ read_eof expect <<EOF
 EOF
 assert_equal "$expect" "$actual"
 
+# fetch two at a time
+actual="$($NEXUS ticket get --id 1 --id 2 | jq -scr '.[] | {id: .id, state: .state, summary: .summary, owner_id: .owner_id, roles: .roles}')"
+read_eof expect <<EOF
+{"id":1,"state":"available","summary":"This is the first ticket we've created, and then some","owner_id":"${NEXUS_AGENT}","roles":["another"]}
+{"id":2,"state":"available","summary":"This is the second ticket we've created","owner_id":"${NEXUS_AGENT}","roles":["reviewer"]}
+EOF
+assert_equal "$expect" "$actual"
+
 # put our status back
 actual="$($NEXUS ticket update --id 1 --state available | jq -scr '.[] | {id: .id, state: .state, summary: .summary, owner_id: .owner_id, roles: .roles}')"
 read_eof expect <<EOF
