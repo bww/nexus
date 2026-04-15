@@ -15,7 +15,9 @@ test-unit:
 .PHONY: test-integrate
 test-integrate: export NEXUS=$(PRODUCT)
 test-integrate: build
-	for test in notes tickets; do "$(TEST_ROOT)/bin/$${test}.sh"; done
+	@for test in notes tickets; do \
+	  "$(TEST_ROOT)/bin/$${test}.sh"; \
+	done
 
 .PHONY: test
 test:
