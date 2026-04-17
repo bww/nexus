@@ -11,15 +11,15 @@ read_eof () {
   fi
   local data=""
   set +e
-  while IFS= read line; do
+  while IFS= read -r line; do
     if [ -z "$data" ]; then
       data="$line"
     else
-      printf -v data "${data}\n${line}"
+      data="${data}"$'\n'"${line}"
     fi
   done
   set -e
-  printf -v "$1" "$data"
+  printf -v "$1" '%s' "$data"
 }
 
 # stacktrace
@@ -58,7 +58,9 @@ assert_status () {
   actual=$?
   set -e
   if [[ "$expect" -ne "$actual" ]]; then
-    echo -e "assert: not equal @ $(current_line)\n    expected: $expect\n         got: $actual"
+    echo "assert: not equal @ $(current_line)"
+    echo "    expected: $expect"
+    echo "         got: $actual"
     exit 1
   fi
 }
@@ -66,7 +68,8 @@ assert_status () {
 # assert an empty string
 assert_empty () {
   if [ ! -z "$1" ]; then
-    echo "assert: not empty @ $(current_line) [$1]"
+    actual=$(echo -n "$1" | escape_dsp)
+    echo "assert: not empty @ $(current_line) [${actual}]"
     exit 1
   fi
 }
@@ -74,9 +77,11 @@ assert_empty () {
 # assert an strings equal
 assert_equal () {
   if [ "$1" != "$2" ]; then
-    expect=$(escape_ws "$1")
-    actual=$(escape_ws "$2")
-    echo -e "assert: not equal @ $(current_line)\n    expected: ${_bold}{${_clear}$expect${_bold}}${_clear}\n         got: ${_bold}{${_clear}$actual${_bold}}${_clear}"
+    expect=$(echo -n "$1" | escape_dsp)
+    actual=$(echo -n "$2" | escape_dsp)
+    echo "assert: not equal @ $(current_line)"
+    echo "    expected: ${_bold}{${_clear}${expect}${_bold}}${_clear}"
+    echo "         got: ${_bold}{${_clear}${actual}${_bold}}${_clear}"
     exit 1
   fi
 }
@@ -85,7 +90,11 @@ assert_equal () {
 # usage: assert_contains substring string
 assert_contains () {
   if [[ "$2" != *"$1"* ]]; then
-    echo -e "assert: does not contain @ $(current_line)\n    not found: ${_bold}{${_clear}$1${_bold}}${_clear}\n    in: ${_bold}{${_clear}$2${_bold}}${_clear}"
+    needle=$(echo -n "$1" | escape_dsp)
+    haystack=$(echo -n "$2" | escape_dsp)
+    echo "assert: does not contain @ $(current_line)"
+    echo "    not found: ${_bold}{${_clear}${needle}${_bold}}${_clear}"
+    echo "    in: ${_bold}{${_clear}${haystack}${_bold}}${_clear}"
     exit 1
   fi
 }
@@ -94,13 +103,23 @@ assert_contains () {
 # usage: assert_all_lines_present EXPECT ACTUAL
 # example: assert_all_lines_present "first"$'\n'"second" "second"$'\n'"first"
 assert_all_lines_present () {
-  wantSorted=$(printf '%s\n' "$1" | sort)
-  gotSorted=$(printf '%s\n' "$2" | sort)
+  expect=$(printf '%s\n' "$1" | sort)
+  actual=$(printf '%s\n' "$2" | sort)
 
-  if [ "${wantSorted}" != "${gotSorted}" ]; then
-    echo -e "assert: not all lines are present @ $(current_line)\n    expected: ${_bold}{${_clear}${wantSorted}${_bold}}${_clear}\n         got: ${_bold}{${_clear}${gotSorted}${_bold}}${_clear}"
+  if [ "${expect}" != "${actual}" ]; then
+    expect=$(echo -n "$expect" | escape_dsp)
+    actual=$(echo -n "$actual" | escape_dsp)
+    echo "assert: not all lines are present @ $(current_line)"
+    echo "    expected: ${_bold}{${_clear}${expect}${_bold}}${_clear}"
+    echo "         got: ${_bold}{${_clear}${actual}${_bold}}${_clear}"
     exit 1
   fi
+}
+
+# escape literal backslashes by doubling them, so content like `\u000a`
+# survives any downstream escape interpretation; reads from STDIN
+escape_esc () {
+  sed 's/\\/\\\\/g'
 }
 
 # replace whitespace with visible characters or escape sequences
@@ -108,6 +127,6 @@ assert_all_lines_present () {
 # TAB 0x09 = \t
 # CR  0x0D = \r
 # LF  0x0A = \n
-escape_ws () {
-  echo "$@" | sed 's/ /·/g;s/\t/\\\\t/g;s/\r/\\\\r/g;s/$/\\\\n/g'
+escape_dsp () {
+  sed 's/ /·/g; s/\t/\\t/g; s/\r/\\r/g; s/$/\\n/g; s/\\/\\\\/g'
 }

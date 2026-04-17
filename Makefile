@@ -13,9 +13,10 @@ test-unit:
 	cargo test
 
 .PHONY: test-integrate
+test-integrate: TEST_PKGS=tickets notes
 test-integrate: export NEXUS=$(PRODUCT)
 test-integrate: build
-	@for test in notes tickets; do \
+	@for test in $(TEST_PKGS); do \
 	  "$(TEST_ROOT)/bin/$${test}.sh"; \
 	done
 
