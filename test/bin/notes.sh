@@ -32,3 +32,17 @@ read_eof expect <<EOF
 {"id":1,"creator_id":"${NEXUS_AGENT}","commit_sha":"fafafafafafa","summary":"Remember to read The Raven, by E.A. Poe","detail":"Once upon a midnight dreary, while I pondered, weak and weary,\\nOver many a quaint and curious volume of forgotten lore\\u2014\\n    While I nodded, nearly napping, suddenly there came a tapping,\\nAs of some one gently rapping, rapping at my chamber door.\\n\\u201c\\u2019Tis some visitor,\\u201d I muttered, \\u201ctapping at my chamber door\\u2014\\n            Only this and nothing more.\\u201d\\n"}
 EOF
 assert_equal "$expect" "$actual"
+
+# list every note
+actual="$($NEXUS note list | jq -scra '.[] | {id, creator_id, commit_sha, summary, detail}')"
+read_eof expect <<EOF
+{"id":1,"creator_id":"${NEXUS_AGENT}","commit_sha":"fafafafafafa","summary":"Remember to read The Raven, by E.A. Poe","detail":null}
+EOF
+assert_equal "$expect" "$actual"
+
+# list every note with detail
+actual="$($NEXUS --verbose note list | jq -scra '.[] | {id, creator_id, commit_sha, summary, detail}')"
+read_eof expect <<EOF
+{"id":1,"creator_id":"${NEXUS_AGENT}","commit_sha":"fafafafafafa","summary":"Remember to read The Raven, by E.A. Poe","detail":"Once upon a midnight dreary, while I pondered, weak and weary,\\nOver many a quaint and curious volume of forgotten lore\\u2014\\n    While I nodded, nearly napping, suddenly there came a tapping,\\nAs of some one gently rapping, rapping at my chamber door.\\n\\u201c\\u2019Tis some visitor,\\u201d I muttered, \\u201ctapping at my chamber door\\u2014\\n            Only this and nothing more.\\u201d\\n"}
+EOF
+assert_equal "$expect" "$actual"
