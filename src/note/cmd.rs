@@ -59,7 +59,7 @@ pub struct ListNoteOptions {
 #[derive(Args, Debug)]
 pub struct FetchNoteOptions {
   #[clap(long, help="The note to fetch")]
-  id: i32
+  id: Vec<i32>
 }
 
 #[derive(Args, Debug)]
@@ -87,21 +87,6 @@ pub fn note(opts: &Options, note: &NoteOptions, conn: Connection) -> Result<(), 
     NoteCommand::Fetch(sub)   => fetch_note(opts, note, sub, conn),
     NoteCommand::Update(sub)  => update_note(opts, note, sub, conn),
     NoteCommand::Delete(sub)  => delete_note(opts, note, sub, conn),
-  }
-}
-
-fn note_row(_conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<note::Note> + '_ {
-  |row| {
-    Ok(note::Note {
-      id: row.get(0)?,
-      creator_id: row.get(1)?,
-      commit_sha: row.get(2)?,
-      summary: row.get(3)?,
-      detail: row.get(4)?,
-      data: row.get(5)?,
-      created_at: row.get(6)?,
-      updated_at: row.get(7)?,
-    })
   }
 }
 
@@ -177,7 +162,7 @@ fn list_note(opts: &Options, _note: &NoteOptions, list: &ListNoteOptions, conn: 
   }
 
   let mut stmt = conn.prepare(&query.sql)?;
-  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), note_row(&conn))?;
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), note::from_row(&conn))?;
 
   let mut n: i32 = 0;
   let format = &opts.format();
@@ -194,37 +179,35 @@ fn list_note(opts: &Options, _note: &NoteOptions, list: &ListNoteOptions, conn: 
 }
 
 fn fetch_note(opts: &Options, _note: &NoteOptions, fetch: &FetchNoteOptions, conn: Connection) -> Result<(), error::Error> {
-  let mut stmt = conn.prepare("
-    SELECT id, creator_id, commit_sha, summary, detail, data, created_at, updated_at
-    FROM note
-    WHERE id = ?1")?;
-
-  let val = stmt.query_one(rusqlite::params![fetch.id], note_row(&conn))?;
-
-  println!("{}", val.formatted(&opts.format()));
+  for id in &fetch.id {
+    println!("{}", note::fetch(&conn, *id)?.formatted(&opts.format()));
+  }
   Ok(())
 }
 
 fn update_note(opts: &Options, _note: &NoteOptions, update: &UpdateNoteOptions, conn: Connection) -> Result<(), error::Error> {
-  let mut stmt = conn.prepare("
-    SELECT id, creator_id, commit_sha, summary, detail, data, created_at, updated_at
-    FROM note
-    WHERE id = ?1")?;
-
-  let mut val = stmt.query_one(rusqlite::params![update.id], note_row(&conn))?;
+  let mut val = note::fetch(&conn, update.id)?;
   val.commit_sha = update.commit.to_owned().or(val.commit_sha);
   val.summary = update.summary.to_owned().unwrap_or(val.summary);
   val.detail = cli::read_input(&update.detail)?.or(val.detail);
   val.updated_at = chrono::Utc::now();
 
-  let mut stmt = conn.prepare("
-    UPDATE note SET commit_sha = ?1, summary = ?2, detail = ?3, updated_at = ?4
-    WHERE id = ?5"
-  )?;
-  stmt.execute(rusqlite::params![
-    &val.commit_sha, &val.summary, &val.detail, &val.updated_at,
-    update.id,
-  ])?;
+  let mut query = sqlx::Query::new();
+  query
+    .push("UPDATE note SET")
+    .push("  commit_sha = ").push_var(val.commit_sha.to_owned())
+    .push(", summary = ").push_var(val.summary.to_owned())
+    .push(", detail = ").push_var(val.detail.to_owned())
+    .push(", updated_at = ").push_var(val.updated_at)
+    .push_where("id = ").push_var(update.id);
+
+  if opts.debug {
+    eprintln!("query: {}", &query);
+  }
+
+  conn
+    .prepare(&query.sql)?
+    .execute(rusqlite::params_from_iter(query.args))?;
 
   println!("{}", val.formatted(&opts.format()));
   Ok(())

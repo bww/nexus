@@ -75,7 +75,7 @@ EOF
 assert_equal "$expect" "$actual"
 
 # list every note relating to a commit
-actual="$($NEXUS note list --commit "fafafafafafa" | jq -scra '.[] | {id, creator_id, commit_sha, summary, detail}')"
+actual="$($NEXUS note list --commit fafafafafafa | jq -scra '.[] | {id, creator_id, commit_sha, summary, detail}')"
 read_eof expect <<EOF
 {"id":1,"creator_id":"${NEXUS_AGENT}","commit_sha":"fafafafafafa","summary":"Remember to read The Raven, by E.A. Poe","detail":null}
 EOF
@@ -85,5 +85,27 @@ assert_equal "$expect" "$actual"
 actual="$($NEXUS note list --creator "${another_agent}" | jq -scra '.[] | {id, creator_id, commit_sha, summary, detail}')"
 read_eof expect <<EOF
 {"id":3,"creator_id":"${another_agent}","commit_sha":null,"summary":"Remember to read Ode on a Grecian Urn, by John Keats","detail":null}
+EOF
+assert_equal "$expect" "$actual"
+
+# update a note
+actual="$($NEXUS note update --id 2 --commit fcfcfcfcfcfc --summary "Remember to read The Chambered Nautilus by Oliver Wendell Holmes" | jq -scra '.[] | {id, creator_id, commit_sha, summary, detail}')"
+read_eof expect <<EOF
+{"id":2,"creator_id":"${NEXUS_AGENT}","commit_sha":"fcfcfcfcfcfc","summary":"Remember to read The Chambered Nautilus by Oliver Wendell Holmes","detail":null}
+EOF
+assert_equal "$expect" "$actual"
+
+# update a note with detail
+actual="$($NEXUS note update --id 2 --detail - <<EOF| jq -scra '.[] | {id, creator_id, commit_sha, summary, detail}'
+This is the ship of pearl, which, poets feign,
+  Sails the unshadowed main,
+  The venturous bark that flings
+On the sweet summer wind its purpled wings
+In gulfs enchanted, where the Siren sings,
+  And coral reefs lie bare,
+Where the cold sea-maids rise to sun their streaming hair.
+EOF)"
+read_eof expect <<EOF
+{"id":2,"creator_id":"${NEXUS_AGENT}","commit_sha":"fcfcfcfcfcfc","summary":"Remember to read The Chambered Nautilus by Oliver Wendell Holmes","detail":"This is the ship of pearl, which, poets feign,\n  Sails the unshadowed main,\n  The venturous bark that flings\nOn the sweet summer wind its purpled wings\nIn gulfs enchanted, where the Siren sings,\n  And coral reefs lie bare,\nWhere the cold sea-maids rise to sun their streaming hair.\n"}
 EOF
 assert_equal "$expect" "$actual"

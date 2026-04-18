@@ -283,8 +283,9 @@ fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketO
     }
   }
 
-  tx.prepare(&query.sql)?.
-    execute(rusqlite::params_from_iter(query.args))?;
+  tx
+    .prepare(&query.sql)?
+    .execute(rusqlite::params_from_iter(query.args))?;
 
   tx.commit()?;
   println!("{}", val.formatted(&opts.format()));

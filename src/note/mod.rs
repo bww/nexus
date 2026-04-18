@@ -1,5 +1,6 @@
 use std::fmt::{self, Display};
 
+use rusqlite::{Connection, Result};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json;
@@ -115,4 +116,28 @@ impl Display for cli::Formatted<'_, Note> {
       cli::Format::JSON => self.value.fmt_json(f),
     }
   }
+}
+
+fn from_row(_conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<Note> + '_ {
+  |row| {
+    Ok(Note {
+      id: row.get(0)?,
+      creator_id: row.get(1)?,
+      commit_sha: row.get(2)?,
+      summary: row.get(3)?,
+      detail: row.get(4)?,
+      data: row.get(5)?,
+      created_at: row.get(6)?,
+      updated_at: row.get(7)?,
+    })
+  }
+}
+
+fn fetch(conn: &Connection, id: i32) -> Result<Note, error::Error> {
+  let mut stmt = conn.prepare("
+    SELECT id, creator_id, commit_sha, summary, detail, data, created_at, updated_at
+    FROM note
+    WHERE id = ?1")?;
+
+  Ok(stmt.query_one(rusqlite::params![id], from_row(&conn))?)
 }
