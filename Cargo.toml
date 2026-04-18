@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 rusqlite = { version = "0.39.0", features = ["bundled", "chrono"] }
-clap = { version = "3.1", features = ["derive", "env"] }
+clap = { version = "4.6.1", features = ["derive", "env"] }
+clap-markdown = "0.1.5"
 colored = "3.0.0"
 chrono = { version = "0.4.44", features = ["serde"] }
 rand = "0.10.0"

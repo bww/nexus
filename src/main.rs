@@ -1,7 +1,7 @@
 use std::{fs, path, process};
 
 use colored::Colorize;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, Args};
 use rusqlite::{Connection, Result};
 use gix;
 
@@ -61,7 +61,12 @@ enum Command {
   Ticket(ticket::cmd::TicketOptions),
   #[clap(name="note", about="Notes")]
   Note(note::cmd::NoteOptions),
+  #[clap(name="docs", about="Generate documentation")]
+  Docs(DocsOptions),
 }
+
+#[derive(Args, Debug)]
+pub struct DocsOptions {}
 
 fn main() {
   match cmd(){
@@ -97,5 +102,11 @@ fn cmd() -> Result<(), error::Error> {
     Command::Agent(sub)  => agent::cmd::agent(&opts, sub, conn),
     Command::Ticket(sub) => ticket::cmd::ticket(&opts, sub, conn),
     Command::Note(sub)   => note::cmd::note(&opts, sub, conn),
+    Command::Docs(sub)   => docs(&opts, sub),
   }
+}
+
+fn docs(_opts: &Options, _docs: &DocsOptions) -> Result<(), error::Error> {
+  println!("{}", clap_markdown::help_markdown::<Options>());
+  Ok(())
 }
