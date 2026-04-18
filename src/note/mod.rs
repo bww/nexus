@@ -19,6 +19,7 @@ pub struct NoteSummary<'a> {
   pub creator_id: &'a String,
   pub commit_sha: &'a Option<String>,
   pub summary: &'a String,
+  pub detail: &'a Option<String>,
   pub created_at: &'a DateTime<Utc>,
   pub updated_at: &'a DateTime<Utc>,
 }
@@ -85,6 +86,7 @@ impl Note {
       creator_id: &self.creator_id,
       commit_sha: &self.commit_sha,
       summary: &self.summary,
+      detail: &self.detail,
       created_at: &self.created_at,
       updated_at: &self.updated_at,
     }

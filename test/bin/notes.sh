@@ -81,8 +81,8 @@ read_eof expect <<EOF
 EOF
 assert_equal "$expect" "$actual"
 
-# list every note with an owner
-actual="$($NEXUS note list --owner "${another_agent}" | jq -scra '.[] | {id, creator_id, commit_sha, summary, detail}')"
+# list every note crated by another agent
+actual="$($NEXUS note list --creator "${another_agent}" | jq -scra '.[] | {id, creator_id, commit_sha, summary, detail}')"
 read_eof expect <<EOF
 {"id":3,"creator_id":"${another_agent}","commit_sha":null,"summary":"Remember to read Ode on a Grecian Urn, by John Keats","detail":null}
 EOF
