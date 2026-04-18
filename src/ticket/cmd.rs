@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use clap::{Subcommand, Args};
 use rusqlite::{Connection, Result};
+use chrono::{DateTime, Local};
 
 use crate::error;
 use crate::cli;
@@ -56,6 +57,14 @@ pub struct ListTicketOptions {
   mine: bool,
   #[clap(long, help="Only include tickets that are available")]
   available: bool,
+  #[clap(long, help="Only include tickets created before the specified date and time")]
+  created_before: Option<DateTime<Local>>,
+  #[clap(long, help="Only include tickets created after the specified date and time")]
+  created_after: Option<DateTime<Local>>,
+  #[clap(long, help="Only include tickets updated before the specified date and time")]
+  updated_before: Option<DateTime<Local>>,
+  #[clap(long, help="Only include tickets updated after the specified date and time")]
+  updated_after: Option<DateTime<Local>>,
 }
 
 #[derive(Args, Debug)]
@@ -188,6 +197,19 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
   }
   if let Some(state) = &list.state {
     query.push_where("state IN ").push_list(state);
+  }
+
+  if let Some(created_before) = &list.created_before {
+    query.push_where("created_at < ").push_var(created_before.to_owned());
+  }
+  if let Some(updated_before) = &list.updated_before {
+    query.push_where("updated_at < ").push_var(updated_before.to_owned());
+  }
+  if let Some(created_after) = &list.created_after {
+    query.push_where("created_at > ").push_var(created_after.to_owned());
+  }
+  if let Some(updated_after) = &list.updated_after {
+    query.push_where("updated_at > ").push_var(updated_after.to_owned());
   }
 
   query.push(" ORDER BY updated_at DESC");

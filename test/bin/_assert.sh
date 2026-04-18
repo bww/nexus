@@ -128,5 +128,5 @@ escape_esc () {
 # CR  0x0D = \r
 # LF  0x0A = \n
 escape_dsp () {
-  sed 's/ /·/g; s/\t/\\t/g; s/\r/\\r/g; s/$/\\n/g; s/\\/\\\\/g'
+  sed 's/ /·/g; s/\t/\\t/g; s/\r/\\r/g; s/$/\\n/g;'
 }

@@ -1,9 +1,10 @@
 use clap::{Subcommand, Args};
 use rusqlite::{Connection, Result};
+use chrono::{DateTime, Local};
 
 use crate::error;
 use crate::cli;
-use crate::{sql_where, sql_list};
+use crate::sqlx;
 use crate::note;
 use crate::Options;
 
@@ -45,6 +46,14 @@ pub struct ListNoteOptions {
   creator: Option<Vec<String>>,
   #[clap(long, help="Only include notes associated with any of the specified commit SHA")]
   commit: Option<Vec<String>>,
+  #[clap(long, help="Only include notes created before the specified date and time")]
+  created_before: Option<DateTime<Local>>,
+  #[clap(long, help="Only include notes created after the specified date and time")]
+  created_after: Option<DateTime<Local>>,
+  #[clap(long, help="Only include notes updated before the specified date and time")]
+  updated_before: Option<DateTime<Local>>,
+  #[clap(long, help="Only include notes updated after the specified date and time")]
+  updated_after: Option<DateTime<Local>>,
 }
 
 #[derive(Args, Debug)]
@@ -134,28 +143,41 @@ fn create_note(opts: &Options, note: &NoteOptions, create: &CreateNoteOptions, c
 }
 
 fn list_note(opts: &Options, _note: &NoteOptions, list: &ListNoteOptions, conn: Connection) -> Result<(), error::Error> {
-  let mut query = "
-    SELECT id, creator_id, commit_sha, summary, detail, data, created_at, updated_at
-    FROM note".to_string();
-
-  let mut args: Vec<&dyn rusqlite::types::ToSql> = vec![];
+  let mut query = sqlx::Query::new();
+  query
+    .push("SELECT id, creator_id, commit_sha, summary, ")
+    .push(if opts.verbose { "detail" } else { "NULL" })
+    .push(", data, created_at, updated_at FROM note");
 
   if let Some(creator) = &list.creator {
-    sql_where!(query, args);
-    query.push_str("creator_id IN ");
-    sql_list!(query, args, creator);
+    query.push_where("creator_id IN ").push_list(creator);
   }
-
   if let Some(commit) = &list.commit {
-    sql_where!(query, args);
-    query.push_str("commit_sha IN ");
-    sql_list!(query, args, commit);
+    query.push_where("commit_sha IN ").push_list(commit);
   }
 
-  query.push_str(" ORDER BY updated_at DESC");
+  if let Some(created_before) = &list.created_before {
+    query.push_where("created_at < ").push_var(created_before.to_owned());
+  }
+  if let Some(updated_before) = &list.updated_before {
+    query.push_where("updated_at < ").push_var(updated_before.to_owned());
+  }
+  if let Some(created_after) = &list.created_after {
+    query.push_where("created_at > ").push_var(created_after.to_owned());
+  }
+  if let Some(updated_after) = &list.updated_after {
+    query.push_where("updated_at > ").push_var(updated_after.to_owned());
+  }
 
-  let mut stmt = conn.prepare(&query)?;
-  let vals_iter = stmt.query_map(rusqlite::params_from_iter(args.iter()), note_row(&conn))?;
+  // notes are listed chronologically
+  query.push(" ORDER BY created_at");
+
+  if opts.debug {
+    eprintln!("query: {}", &query);
+  }
+
+  let mut stmt = conn.prepare(&query.sql)?;
+  let vals_iter = stmt.query_map(rusqlite::params_from_iter(query.args), note_row(&conn))?;
 
   let mut n: i32 = 0;
   let format = &opts.format();

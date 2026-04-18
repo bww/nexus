@@ -15,9 +15,9 @@ mod note;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Options {
-  #[clap(long, help="Enable debugging mode")]
+  #[clap(long, env="NEXUS_DEBUG", help="Enable debugging mode")]
   debug: bool,
-  #[clap(long, help="Enable verbose output")]
+  #[clap(long, env="NEXUS_VERBOSE", help="Enable verbose output")]
   verbose: bool,
   #[clap(long, env="NEXUS_PROJECT", help="Path to the project root")]
   project: Option<String>,

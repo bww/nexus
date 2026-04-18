@@ -53,6 +53,12 @@ impl Query {
     }
   }
 
+  pub fn new_with_str(query: &str) -> Self {
+    let mut q = Self::new();
+    q.push(query);
+    q
+  }
+
   pub fn push(&mut self, query: &str) -> &mut Self {
     self.sql.push_str(query);
     self
