@@ -25,19 +25,19 @@ pub enum TicketCommand {
   Create(CreateTicketOptions),
   #[clap(name="list", about="List tickets")]
   List(ListTicketOptions),
-  #[clap(name="get", about="Fetch a ticket")]
+  #[clap(name="get", about="Fetch tickets by identifier")]
   Fetch(FetchTicketOptions),
   #[clap(name="update", about="Update a ticket")]
   Update(UpdateTicketOptions),
   #[clap(name="take", about="Take ownership of a ticket")]
   Take(TakeTicketOptions),
-  #[clap(name="abandon", about="Abandon tickets currently owned by an agent that could not be completed so that another agent may take them")]
+  #[clap(name="abandon", about="Abandon tickets owned by an agent so that another agent may take them")]
   Abandon(AbandonTicketOptions),
 }
 
 #[derive(Args, Debug)]
 pub struct CreateTicketOptions {
-  #[clap(long, help="The roles the ticket may be performed by")]
+  #[clap(long, help="The agent roles the ticket may be performed by")]
   role: Option<Vec<String>>,
   #[clap(long, help="A brief summary of the ticket")]
   summary: String,
@@ -121,6 +121,7 @@ fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketO
     detail: cli::read_input(&create.detail)?,
     data: None,
     owner_id: None,
+    references: None,
     created_at: chrono::Utc::now(),
     updated_at: chrono::Utc::now(),
   };

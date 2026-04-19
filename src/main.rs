@@ -15,15 +15,15 @@ mod note;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Options {
-  #[clap(long, env="NEXUS_DEBUG", help="Enable debugging mode")]
+  #[clap(long, env="NEXUS_DEBUG", help="Enable debugging mode. When debugging is enabled, additional output is written to aid in debugging.")]
   debug: bool,
-  #[clap(long, env="NEXUS_VERBOSE", help="Enable verbose output")]
+  #[clap(long, env="NEXUS_VERBOSE", help="Enable verbose output. When verbose mode is enabled, some data that is normally not displayed is included.")]
   verbose: bool,
-  #[clap(long, env="NEXUS_PROJECT", help="Path to the project root")]
+  #[clap(long, env="NEXUS_PROJECT", help="Path to the project root.")]
   project: Option<String>,
-  #[clap(long, env="NEXUS_DATABASE", help="Path to the database")]
+  #[clap(long, env="NEXUS_DATABASE", help="Path to the Nexus database. (Prefer the --project flag unless you have a specific reason for using --database)")]
   database: Option<String>,
-  #[clap(long, env="NEXUS_FORMAT", help="The output format to use")]
+  #[clap(long, env="NEXUS_FORMAT", help="The output format to use. The JSON output format is the most complete.")]
   format: Option<cli::Format>,
   #[clap(subcommand)]
   command: Command,
@@ -55,13 +55,13 @@ impl Options {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-  #[clap(name="agent", about="Agents")]
-  Agent(agent::cmd::AgentOptions),
-  #[clap(name="ticket", about="Tickets")]
+  #[clap(name="ticket", about="Manage tickets")]
   Ticket(ticket::cmd::TicketOptions),
-  #[clap(name="note", about="Notes")]
+  #[clap(name="note", about="Manage notes")]
   Note(note::cmd::NoteOptions),
-  #[clap(name="docs", about="Generate documentation")]
+  #[clap(name="agent", about="Agent context utilites")]
+  Agent(agent::cmd::AgentOptions),
+  #[clap(name="docs", about="Display documentation about Nexus")]
   Docs(DocsOptions),
 }
 

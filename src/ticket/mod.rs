@@ -74,6 +74,67 @@ impl rusqlite::types::ToSql for State {
   }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub enum Action {
+  #[serde(rename = "references")]
+  References,
+}
+
+impl Action {
+  fn from_text(text: &[u8]) -> rusqlite::types::FromSqlResult<Self> {
+    let text = match str::from_utf8(text) {
+      Ok(text) => text,
+      Err(err) => return Err(rusqlite::types::FromSqlError::Utf8Error(err)),
+    };
+    match  Action::from_str(text) {
+      Ok(state) => Ok(state),
+      Err(_)    => return Err(rusqlite::types::FromSqlError::InvalidType),
+    }
+  }
+}
+
+impl FromStr for Action {
+  type Err = String;
+  fn from_str(input: &str) -> Result<Self, Self::Err> {
+    match input {
+      "references"  => Ok(Action::References),
+      _             => Err(format!("Invalid action: {}", input)),
+    }
+  }
+}
+
+impl Display for Action {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::References => write!(f, "references"),
+    }
+  }
+}
+
+impl rusqlite::types::FromSql for Action {
+  fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+    match value {
+      rusqlite::types::ValueRef::Text(text) => Ok(Action::from_text(text)?),
+      _                                     => Err(rusqlite::types::FromSqlError::InvalidType),
+    }
+  }
+}
+
+impl rusqlite::types::ToSql for Action {
+  fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+    Ok(rusqlite::types::ToSqlOutput::Owned(
+      rusqlite::types::Value::Text(self.to_string())
+    ))
+  }
+}
+
+#[derive(Debug, Serialize)]
+pub struct Reference {
+  pub src_id: i32,
+  pub dst_id: i32,
+  pub action: Action,
+}
+
 pub fn format_id(id: i32) -> String {
   format!("#{}", id)
 }
@@ -135,6 +196,7 @@ pub struct Ticket {
   pub detail: Option<String>,
   pub data: Option<Vec<u8>>,
   pub owner_id: Option<String>,
+  pub references: Option<Vec<Reference>>,
   pub created_at: DateTime<Utc>,
   pub updated_at: DateTime<Utc>,
 }
@@ -160,6 +222,15 @@ impl Ticket {
         ticket_id INTEGER NOT NULL REFERENCES ticket (id),
         role      TEXT UNIQUE NOT NULL,
         PRIMARY KEY (ticket_id, role)
+      )",
+      (),
+    )?;
+    conn.execute("
+      CREATE TABLE IF NOT EXISTS ticket_reference (
+        src_id  INTEGER NOT NULL REFERENCES ticket (id),
+        dst_id  INTEGER NOT NULL REFERENCES ticket (id),
+        action  TEXT NOT NULL,
+        PRIMARY KEY (src_id, dst_id, action)
       )",
       (),
     )?;
@@ -220,6 +291,7 @@ fn from_row(conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Re
       detail: row.get(4)?,
       data: row.get(5)?,
       owner_id: row.get(6)?,
+      references: None,
       created_at: row.get(7)?,
       updated_at: row.get(8)?,
     })
