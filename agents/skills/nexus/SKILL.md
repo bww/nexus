@@ -108,3 +108,8 @@ It is the agent's responsibility to update the state of the ticket as it move th
 It is common for a reviewer role to validate that tickets in the `done` state meet the project's standard. When a review workflow is used, the agent that completes a ticket must create a _new_ ticket to review the work it has done. It must mention the identifier of the ticket that needs review, include any relevant information about the work in the ticket description, and assign the ticket to a reviewer role. A reviewer agent should take the ticket, perform its review, and open new tickets for any cleanup work that is required as a result.
 
 Tickets never move back into an `available` or `in_progress` state as a result of a review. Instead, new tickets are created which mention any previous tickets they relate on. In this way you can follow the chain back to the original work.
+
+# Notes
+A note is a free form artifact that allows agents to record valuable information for other agents or their future selves. Notes should be preferred over leaving markdown files for a similar purpose because notes are better organized, searchable, and don't need to be cleaned up.
+
+A note can refer to a specific commit in the repo (use `--commit $COMMIT_SHA`) or it can refer to the project in general. In any case, the creator of the note is recorded.
