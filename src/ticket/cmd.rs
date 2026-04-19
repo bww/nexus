@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use clap::{Subcommand, Args};
 use rusqlite::{Connection, Result};
 use chrono::{DateTime, Local};
@@ -77,6 +75,8 @@ pub struct FetchTicketOptions {
 pub struct UpdateTicketOptions {
   #[clap(long, help="The ticket to update")]
   id: i32,
+  #[clap(long, help="The fencing token for resolving concurrent updates")]
+  fence: i32,
   #[clap(long, help="The roles the ticket may be performed by")]
   role: Option<Vec<String>>,
   #[clap(long, help="The state of the ticket")]
@@ -115,6 +115,7 @@ pub fn ticket(opts: &Options, ticket: &TicketOptions, conn: Connection) -> Resul
 fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketOptions, mut conn: Connection) -> Result<(), error::Error> {
   let mut val = ticket::Ticket{
     id: 0,
+    fence: 0,
     state: ticket::State::Available,
     summary: create.summary.to_owned(),
     roles: create.role.to_owned(),
@@ -172,7 +173,7 @@ fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketO
 fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions, conn: Connection) -> Result<(), error::Error> {
   let mut query = sqlx::Query::new();
   query.push("
-    SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
+    SELECT id, fence, state, summary, detail, data, owner_id, created_at, updated_at
     FROM ticket");
 
   if let Some(role) = &list.role {
@@ -245,6 +246,7 @@ fn fetch_ticket(opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOpti
 
 fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketOptions, mut conn: Connection) -> Result<(), error::Error> {
   let mut val = ticket::fetch(&conn, update.id)?;
+  val.fence = update.fence + 1; // increment the fence on update
   val.roles = update.role.to_owned().or(val.roles);
   val.state = update.state.to_owned().unwrap_or(val.state);
   val.summary = update.summary.to_owned().unwrap_or(val.summary);
@@ -256,15 +258,24 @@ fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketO
   let mut query = sqlx::Query::new();
   query
     .push("UPDATE ticket SET")
-    .push("  state = ").push_var(val.state.to_owned())
+    .push("  fence = ").push_var(val.fence.to_owned())
+    .push(", state = ").push_var(val.state.to_owned())
     .push(", summary = ").push_var(val.summary.to_owned())
     .push(", detail = ").push_var(val.detail.to_owned())
     .push(", updated_at = ").push_var(val.updated_at)
     .push_where("id = ").push_var(update.id);
 
+  query.push_where("fence = ").push_var(update.fence);
+  query.push(" RETURNING id");
+
   if opts.debug {
     eprintln!("query: {}", &query);
   }
+
+  let updated: Vec<i32> = tx
+    .prepare(&query.sql)?
+    .query_map(rusqlite::params_from_iter(query.args), sqlx::results::id_from_row(&tx))?
+    .collect::<rusqlite::Result<Vec<_>>>()?;
 
   if let Some(roles) = &update.role {
     tx.execute("
@@ -284,11 +295,12 @@ fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketO
     }
   }
 
-  tx
-    .prepare(&query.sql)?
-    .execute(rusqlite::params_from_iter(query.args))?;
-
   tx.commit()?;
+
+  if let Some(missing) = sqlx::results::missing_one(update.id, &updated) {
+    return Err(error::Error::CommandError(format!("error: could not update: {}", ticket::format_id(missing))));
+  }
+
   println!("{}", val.formatted(&opts.format()));
   Ok(())
 }
@@ -296,10 +308,12 @@ fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketO
 fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions, conn: Connection) -> Result<(), error::Error> {
   let mut query = sqlx::Query::new();
   query
-    .push("UPDATE ticket SET owner_id = ").push_var(ticket.agent.to_owned())
+    .push("UPDATE ticket SET")
+    .push("  owner_id = ").push_var(ticket.agent.to_owned())
+    .push(", fence = fence + 1")
     .push_where("id IN ").push_list(&take.id)
     .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(" OR ").push_var(take.force).push(" = TRUE)")
-    .push(" RETURNING id, state, summary, roles, detail, data, owner_id, created_at, updated_at");
+    .push(" RETURNING id, fence, state, summary, detail, data, owner_id, created_at, updated_at");
 
   if opts.debug {
     eprintln!("query: {}", &query);
@@ -318,12 +332,9 @@ fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions,
     }
   };
 
-  let take_set: HashSet<_> = (&take.id).into_iter().collect();
-  let took_set: HashSet<_> = (&taken).into_iter().collect();
-  let missing: Vec<&i32> = take_set.difference(&took_set).cloned().collect();
-
+  let missing: Vec<&i32> = sqlx::results::missing(&take.id, &taken);
   if !missing.is_empty() {
-    return Err(error::Error::CommandError(format!("warning: could not take: {}", ticket::format_ids(&missing))));
+    return Err(error::Error::CommandError(format!("error: could not take: {}", ticket::format_ids(&missing))));
   }
   Ok(())
 }
@@ -331,7 +342,9 @@ fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions,
 fn abandon_ticket(opts: &Options, ticket: &TicketOptions, abandon: &AbandonTicketOptions, conn: Connection) -> Result<(), error::Error> {
   let mut query = sqlx::Query::new();
   query
-    .push("UPDATE ticket SET owner_id = NULL")
+    .push("UPDATE ticket SET")
+    .push("  owner_id = NULL")
+    .push(", fence = fence + 1")
     .push_where("owner_id = ").push_var(ticket.agent.to_owned())
     .push_where("state NOT IN ").push_list(&[State::Done]);
 
@@ -339,7 +352,7 @@ fn abandon_ticket(opts: &Options, ticket: &TicketOptions, abandon: &AbandonTicke
     query.push_where("id IN ").push_list(ids);
   }
 
-  query.push(" RETURNING id, state, summary, roles, detail, data, owner_id, created_at, updated_at");
+  query.push(" RETURNING id, fence, state, summary, detail, data, owner_id, created_at, updated_at");
 
   if opts.debug {
     eprintln!("query: {}", &query);

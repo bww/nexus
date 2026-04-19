@@ -20,7 +20,7 @@ pub enum AgentCommand {
 #[derive(Args, Debug)]
 pub struct CreateAgentOptions {
   #[clap(long, help="The agent's role")]
-  role: String,
+  role: Option<String>,
 }
 
 pub fn agent(opts: &Options, agent: &AgentOptions, conn: Connection) -> Result<(), error::Error> {

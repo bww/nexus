@@ -2,6 +2,8 @@ use std::fmt;
 
 use rusqlite;
 
+pub mod results;
+
 #[macro_export]
 macro_rules! sql_where {
   ($query:expr, $args:expr) => {

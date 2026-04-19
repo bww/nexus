@@ -153,6 +153,7 @@ pub fn format_ids<T: Borrow<i32>>(ids: &[T]) -> String {
 #[derive(Debug, Serialize)]
 pub struct TicketSummary<'a> {
   pub id: i32,
+  pub fence: i32,
   pub state: &'a State,
   pub roles: &'a Option<Vec<String>>,
   pub summary: &'a String,
@@ -190,6 +191,7 @@ impl Display for cli::Formatted<'_, TicketSummary<'_>> {
 #[derive(Debug, Serialize)]
 pub struct Ticket {
   pub id: i32,
+  pub fence: i32,
   pub state: State,
   pub roles: Option<Vec<String>>,
   pub summary: String,
@@ -206,8 +208,8 @@ impl Ticket {
     conn.execute("
       CREATE TABLE IF NOT EXISTS ticket (
         id         INTEGER PRIMARY KEY,
+        fence      INTEGER NOT NULL DEFAULT 0,
         state      TEXT NOT NULL,
-        roles      TEXT,
         summary    TEXT NOT NULL,
         detail     TEXT,
         data       BLOB,
@@ -240,6 +242,7 @@ impl Ticket {
   pub fn summary(&self) -> TicketSummary<'_> {
     TicketSummary{
       id: self.id,
+      fence: self.fence,
       state: &self.state,
       roles: &self.roles,
       summary: &self.summary,
@@ -285,8 +288,9 @@ fn from_row(conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Re
 
     Ok(Ticket {
       id: id,
-      state: row.get(1)?,
-      summary: row.get(2)?,
+      fence: row.get(1)?,
+      state: row.get(2)?,
+      summary: row.get(3)?,
       roles: Some(role_iter.collect::<Result<Vec<String>, _>>()?),
       detail: row.get(4)?,
       data: row.get(5)?,
@@ -300,7 +304,7 @@ fn from_row(conn: &Connection) -> impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Re
 
 fn fetch(conn: &Connection, id: i32) -> Result<Ticket, error::Error> {
   let mut stmt = conn.prepare("
-    SELECT id, state, summary, roles, detail, data, owner_id, created_at, updated_at
+    SELECT id, fence, state, summary, detail, data, owner_id, created_at, updated_at
     FROM ticket
     WHERE id = ?1")?;
 
