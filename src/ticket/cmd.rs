@@ -244,7 +244,7 @@ fn fetch_ticket(opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOpti
   Ok(())
 }
 
-fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketOptions, mut conn: Connection) -> Result<(), error::Error> {
+fn update_ticket(opts: &Options, ticket: &TicketOptions, update: &UpdateTicketOptions, mut conn: Connection) -> Result<(), error::Error> {
   let mut val = ticket::fetch(&conn, update.id)?;
   val.fence = update.fence + 1; // increment the fence on update
   val.roles = update.role.to_owned().or(val.roles);
@@ -262,10 +262,13 @@ fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketO
     .push(", state = ").push_var(val.state.to_owned())
     .push(", summary = ").push_var(val.summary.to_owned())
     .push(", detail = ").push_var(val.detail.to_owned())
-    .push(", updated_at = ").push_var(val.updated_at)
-    .push_where("id = ").push_var(update.id);
+    .push(", updated_at = ").push_var(val.updated_at);
 
-  query.push_where("fence = ").push_var(update.fence);
+  query
+    .push_where("id = ").push_var(update.id)
+    .push_where("fence = ").push_var(update.fence)
+    .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(")");
+
   query.push(" RETURNING id");
 
   if opts.debug {
