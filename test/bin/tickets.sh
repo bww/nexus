@@ -87,6 +87,9 @@ assert_equal "$expect" "$actual"
 # take a ticket that is owned by someone else, which is not allowed
 assert_status 1 $NEXUS ticket take --id 2
 
+# update a ticket that is owned by someone else, which is not allowed
+assert_status 1 $NEXUS ticket update --id 2 --fence 1 --role another
+
 # take a ticket by force
 actual="$($NEXUS ticket take --id 2 --force | jq -scra '.[] | {id, fence, state, summary, owner_id, roles}')"
 read_eof expect <<EOF

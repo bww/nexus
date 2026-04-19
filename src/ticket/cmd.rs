@@ -281,20 +281,22 @@ fn update_ticket(opts: &Options, ticket: &TicketOptions, update: &UpdateTicketOp
     .collect::<rusqlite::Result<Vec<_>>>()?;
 
   if let Some(roles) = &update.role {
-    tx.execute("
-      DELETE FROM ticket_role
-      WHERE ticket_id = ?1",
-      rusqlite::params![&val.id],
-    )?;
-    for role in roles {
+    for id in &updated {
       tx.execute("
-        INSERT INTO ticket_role (
-          ticket_id, role
-        ) VALUES (
-          ?1, ?2
-        )",
-        rusqlite::params![&val.id, &role],
+        DELETE FROM ticket_role
+        WHERE ticket_id = ?1",
+        rusqlite::params![&id],
       )?;
+      for role in roles {
+        tx.execute("
+          INSERT INTO ticket_role (
+            ticket_id, role
+          ) VALUES (
+            ?1, ?2
+          )",
+          rusqlite::params![&id, &role],
+        )?;
+      }
     }
   }
 
