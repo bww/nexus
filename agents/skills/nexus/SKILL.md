@@ -91,6 +91,7 @@ The following is an example of a JSON ticket record:
   "data": null,
   "owner_id": "example-agent",
   "references": null,
+  "fence": 4,
   "created_at": "2026-04-19T17:23:15.453048Z",
   "updated_at": "2026-04-19T17:23:15.453096Z"
 }
@@ -120,8 +121,24 @@ The normal workflow for tickets is:
 
 It is the agent's responsibility to update the state of the ticket as it moves through this process by using the command `nexus ticket update`.
 
-## Concurrency
-Take and update operations are atomic. If two agents race to take the same ticket, only one will succeed; the other will receive an error and a non-zero exit status. When a take fails because the ticket is already owned, do not retry — pick a different ticket instead.
+## Concurrency and Editing
+Take, abandon, and update operations are all atomic. If two agents race to take the same ticket, only one will succeed; the other will receive an error and a non-zero exit status. When a take fails because the ticket is already owned, do not retry — pick a different ticket instead.
+
+`take` and `abandon` use the ticket's owner state for atomicity and do **not** require a fencing token: only one agent (the owner) can ever abandon a given ticket, and only one agent can win a race to take an unowned one. You only need to think about fencing for `update`.
+
+If a ticket has an owner, only that owner may update it. If it has no owner, any agent may update it, but updates from concurrent agents must be serialized. In either case this is accomplished using a **fencing token** that ensures the update is applied to the intended state. When updating a ticket, you must provide the current fencing token via the `--fence` flag. The current token is found in the `fence` property of the ticket.
+
+You will always already have the fencing token when you go to update a ticket, because you obtained it when you read the ticket. Every `nexus ticket get` and `nexus ticket list` response includes the `fence` value for each ticket; you should never be in a position where you are updating a ticket you have not first seen.
+
+The token advances with every successful state-changing operation on the ticket — `take`, `abandon`, and `update` all increment it. So if you read a ticket, then perform a `take`, the `fence` value you read is already stale; re-read the ticket before updating.
+
+The update will fail if **any** of the following is true:
+
+* The ticket has an owner and the agent attempting the update is not that owner,
+* No fencing token was provided,
+* A fencing token was provided but does not match the current value.
+
+If an update fails because of an invalid fencing token, the ticket has been changed by another agent (or by a take/abandon you forgot about) since you last read it. You should fetch the ticket again to read the new `fence` value, decide whether your edit is still appropriate in light of the new state, and then either retry the update with the new token or abandon the change. The decision to continue at all is yours; do not assume a retry is always the right move.
 
 ## Review Workflow
 Whether the project uses a review workflow should be communicated to you by the user. If it is not explicitly stated, infer it as follows:
@@ -139,16 +156,22 @@ A typical end-to-end flow for a worker agent. Replace `$AGENT_ID` with the value
 # Find an available ticket that matches my role
 nexus ticket --agent $AGENT_ID list --available --role reviewer
 
-# Take a ticket
+# Take a ticket (no --fence needed; owner state provides atomicity)
 nexus ticket --agent $AGENT_ID take --id 1
 
-# Move it into progress when you start work
-nexus ticket --agent $AGENT_ID update --id 1 --state in_progress
+# Re-read the ticket to obtain the current fencing token
+FENCE=$(nexus ticket --agent $AGENT_ID get --id 1 | jq -r '.fence')
+
+# Move it into progress when you start work, passing the fence
+nexus ticket --agent $AGENT_ID update --id 1 --state in_progress --fence $FENCE
+
+# A successful update advances the fence; re-read it before the next update
+FENCE=$(nexus ticket --agent $AGENT_ID get --id 1 | jq -r '.fence')
 
 # Mark it done when complete
-nexus ticket --agent $AGENT_ID update --id 1 --state done
+nexus ticket --agent $AGENT_ID update --id 1 --state done --fence $FENCE
 
-# If you cannot finish, abandon it so another agent may take it
+# If you cannot finish, abandon it so another agent may take it (no --fence needed)
 nexus ticket --agent $AGENT_ID abandon --id 1
 
 # Create a follow-up ticket (for example, a review ticket referencing #1)
