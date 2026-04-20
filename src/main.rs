@@ -1,7 +1,7 @@
 use std::{fs, path, process};
 
 use colored::Colorize;
-use clap::{Parser, Subcommand, Args};
+use clap::{Parser, Subcommand, Args, CommandFactory};
 use rusqlite::{Connection, Result};
 use gix;
 
@@ -25,6 +25,8 @@ struct Options {
   database: Option<String>,
   #[clap(long, env="NEXUS_FORMAT", help="The output format to use. The JSON output format is the most complete.")]
   format: Option<cli::Format>,
+  #[clap(long, env="NEXUS_AGENT", global=true, help="A unique identifier of the agent operating on the project; required for all subcommands except `agent` (use: 'agent new' to assign a new identifier)")]
+  agent: Option<String>,
   #[clap(subcommand)]
   command: Command,
 }
@@ -32,6 +34,11 @@ struct Options {
 impl Options {
   pub fn format(&self) -> cli::Format {
     self.format.as_ref().unwrap_or(&cli::Format::JSON).to_owned()
+  }
+
+  pub fn agent(&self) -> Result<&str, error::Error> {
+    self.agent.as_deref().ok_or_else(||
+      error::Error::ArgumentError("--agent (or NEXUS_AGENT) is required".to_owned()))
   }
 
   pub fn project(&self) -> Result<path::PathBuf, error::Error> {
@@ -80,6 +87,13 @@ fn main() {
 
 fn cmd() -> Result<(), error::Error> {
   let opts = Options::parse();
+
+  if !matches!(opts.command, Command::Agent(_)) && opts.agent.is_none() {
+    Options::command().error(
+      clap::error::ErrorKind::MissingRequiredArgument,
+      "--agent (or NEXUS_AGENT) is required for this subcommand",
+    ).exit();
+  }
 
   let dbpath = match &opts.database {
     Some(path) => path::PathBuf::from(path),

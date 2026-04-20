@@ -59,9 +59,9 @@ When you use Nexus you have an identity. This identity is your Agent ID, which i
 
 A "session" for this purpose is the lifetime of a single Claude Code conversation, beginning at the `SessionStart` hook and ending at the `SessionEnd` hook. At session start, generate a new Agent ID and use it for the duration of the session. **At session end, clean up by abandoning every ticket you still own** (see `nexus ticket abandon`). Never reuse an Agent ID across sessions.
 
-`--agent` is usually accepted on the top-level subcommand (`ticket`, `note`), but there is no absolute rule about flag placement; consult `nexus docs` if you are unsure where it goes for a given command.
+The `--agent` flag should be provided at the top level and is required for all commands except `agent`.
 ```
-$ nexus ticket --agent $AGENT_ID list
+$ nexus --agent $AGENT_ID ticket list
 ```
 
 The `NEXUS_AGENT` environment variable is also supported. Note that in Claude Code each Bash invocation runs in a fresh subshell, so an `export` in one call does not carry over to the next. Your practical options are:
@@ -154,28 +154,28 @@ A typical end-to-end flow for a worker agent. Replace `$AGENT_ID` with the value
 
 ```bash
 # Find an available ticket that matches my role
-nexus ticket --agent $AGENT_ID list --available --role reviewer
+nexus --agent $AGENT_ID ticket list --available --role reviewer
 
 # Take a ticket (no --fence needed; owner state provides atomicity)
-nexus ticket --agent $AGENT_ID take --id 1
+nexus --agent $AGENT_ID ticket take --id 1
 
 # Re-read the ticket to obtain the current fencing token
-FENCE=$(nexus ticket --agent $AGENT_ID get --id 1 | jq -r '.fence')
+FENCE=$(nexus --agent $AGENT_ID ticket get --id 1 | jq -r '.fence')
 
 # Move it into progress when you start work, passing the fence
-nexus ticket --agent $AGENT_ID update --id 1 --state in_progress --fence $FENCE
+nexus --agent $AGENT_ID ticket update --id 1 --state in_progress --fence $FENCE
 
 # A successful update advances the fence; re-read it before the next update
-FENCE=$(nexus ticket --agent $AGENT_ID get --id 1 | jq -r '.fence')
+FENCE=$(nexus --agent $AGENT_ID ticket get --id 1 | jq -r '.fence')
 
 # Mark it done when complete
-nexus ticket --agent $AGENT_ID update --id 1 --state done --fence $FENCE
+nexus --agent $AGENT_ID ticket update --id 1 --state done --fence $FENCE
 
 # If you cannot finish, abandon it so another agent may take it (no --fence needed)
-nexus ticket --agent $AGENT_ID abandon --id 1
+nexus --agent $AGENT_ID ticket abandon --id 1
 
 # Create a follow-up ticket (for example, a review ticket referencing #1)
-nexus ticket --agent $AGENT_ID new \
+nexus --agent $AGENT_ID ticket new \
   --role reviewer \
   --summary "Review work completed for ticket #1" \
   --detail - <<EOF
@@ -205,7 +205,7 @@ The following is an example of a JSON note record:
 ## Example: Note Workflow
 ```bash
 # Leave a note tied to the current commit, with the body coming from STDIN
-nexus note --agent $AGENT_ID new \
+nexus --agent $AGENT_ID note new \
   --summary "Refactored auth middleware to meet new compliance requirements" \
   --commit $(git rev-parse HEAD) \
   --detail - <<EOF
@@ -214,18 +214,18 @@ has been removed; downstream callers now use src/auth/session.rs.
 EOF
 
 # Leave a project-level note (no commit)
-nexus note --agent $AGENT_ID new \
+nexus --agent $AGENT_ID note new \
   --summary "Investigation: ingest pipeline drops events under load"
 
 # List every note (summary only by default; add --verbose for full detail)
-nexus note --agent $AGENT_ID list
-nexus --verbose note --agent $AGENT_ID list
+nexus --agent $AGENT_ID note list
+nexus --agent $AGENT_ID --verbose note list
 
 # Filter by commit, by creator, or by time window
-nexus note --agent $AGENT_ID list --commit $(git rev-parse HEAD)
-nexus note --agent $AGENT_ID list --creator agent-reviewer-WRYOL6bXHYsMeI89
-nexus note --agent $AGENT_ID list --created-after 2026-04-01T00:00:00Z
+nexus --agent $AGENT_ID note list --commit $(git rev-parse HEAD)
+nexus --agent $AGENT_ID note list --creator agent-reviewer-WRYOL6bXHYsMeI89
+nexus --agent $AGENT_ID note list --created-after 2026-04-01T00:00:00Z
 
 # Fetch a specific note by id
-nexus note --agent $AGENT_ID get --id 2
+nexus --agent $AGENT_ID note get --id 2
 ```

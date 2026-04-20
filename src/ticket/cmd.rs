@@ -11,8 +11,6 @@ use crate::Options;
 
 #[derive(Args, Debug)]
 pub struct TicketOptions {
-  #[clap(long, env="NEXUS_AGENT", help="A unique identifier of the agent operating on the project (use: 'agent new' to assign a new identifier)")]
-  agent: String,
   #[clap(subcommand)]
   command: TicketCommand,
 }
@@ -170,7 +168,7 @@ fn create_ticket(opts: &Options, _ticket: &TicketOptions, create: &CreateTicketO
   Ok(())
 }
 
-fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions, conn: Connection) -> Result<(), error::Error> {
+fn list_ticket(opts: &Options, _ticket: &TicketOptions, list: &ListTicketOptions, conn: Connection) -> Result<(), error::Error> {
   let mut query = sqlx::Query::new();
   query.push("
     SELECT id, fence, state, summary, detail, data, owner_id, created_at, updated_at
@@ -184,13 +182,13 @@ fn list_ticket(opts: &Options, ticket: &TicketOptions, list: &ListTicketOptions,
 
   if list.mine && list.available {
     query
-      .push_where("owner_id = ").push_var(ticket.agent.to_owned())
+      .push_where("owner_id = ").push_var(opts.agent()?.to_owned())
       .push_where("state = ").push_var(ticket::State::Available);
   }else if list.mine {
-    query.push_where("owner_id = ").push_var(ticket.agent.to_owned());
+    query.push_where("owner_id = ").push_var(opts.agent()?.to_owned());
   }else if list.available {
     query
-      .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(")")
+      .push_where("(owner_id IS NULL OR owner_id = ").push_var(opts.agent()?.to_owned()).push(")")
       .push_where("state = ").push_var(ticket::State::Available);
   }
 
@@ -244,7 +242,7 @@ fn fetch_ticket(opts: &Options, _ticket: &TicketOptions, fetch: &FetchTicketOpti
   Ok(())
 }
 
-fn update_ticket(opts: &Options, ticket: &TicketOptions, update: &UpdateTicketOptions, mut conn: Connection) -> Result<(), error::Error> {
+fn update_ticket(opts: &Options, _ticket: &TicketOptions, update: &UpdateTicketOptions, mut conn: Connection) -> Result<(), error::Error> {
   let mut val = ticket::fetch(&conn, update.id)?;
   val.fence = update.fence + 1; // increment the fence on update
   val.roles = update.role.to_owned().or(val.roles);
@@ -267,7 +265,7 @@ fn update_ticket(opts: &Options, ticket: &TicketOptions, update: &UpdateTicketOp
   query
     .push_where("id = ").push_var(update.id)
     .push_where("fence = ").push_var(update.fence)
-    .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(")");
+    .push_where("(owner_id IS NULL OR owner_id = ").push_var(opts.agent()?.to_owned()).push(")");
 
   query.push(" RETURNING id");
 
@@ -310,14 +308,15 @@ fn update_ticket(opts: &Options, ticket: &TicketOptions, update: &UpdateTicketOp
   Ok(())
 }
 
-fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions, conn: Connection) -> Result<(), error::Error> {
+fn take_ticket(opts: &Options, _ticket: &TicketOptions, take: &TakeTicketOptions, conn: Connection) -> Result<(), error::Error> {
+  let agent = opts.agent()?.to_owned();
   let mut query = sqlx::Query::new();
   query
     .push("UPDATE ticket SET")
-    .push("  owner_id = ").push_var(ticket.agent.to_owned())
+    .push("  owner_id = ").push_var(agent.to_owned())
     .push(", fence = fence + 1")
     .push_where("id IN ").push_list(&take.id)
-    .push_where("(owner_id IS NULL OR owner_id = ").push_var(ticket.agent.to_owned()).push(" OR ").push_var(take.force).push(" = TRUE)")
+    .push_where("(owner_id IS NULL OR owner_id = ").push_var(agent.to_owned()).push(" OR ").push_var(take.force).push(" = TRUE)")
     .push(" RETURNING id, fence, state, summary, detail, data, owner_id, created_at, updated_at");
 
   if opts.debug {
@@ -333,7 +332,7 @@ fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions,
     taken.push(val.id);
     match &opts.format() {
       cli::Format::JSON => println!("{}", cli::Formatted::from(&val, &cli::Format::JSON)),
-      cli::Format::Text => println!("{} owns ticket {}", ticket.agent, ticket::format_ids(&take.id)),
+      cli::Format::Text => println!("{} owns ticket {}", &agent, ticket::format_ids(&take.id)),
     }
   };
 
@@ -344,13 +343,13 @@ fn take_ticket(opts: &Options, ticket: &TicketOptions, take: &TakeTicketOptions,
   Ok(())
 }
 
-fn abandon_ticket(opts: &Options, ticket: &TicketOptions, abandon: &AbandonTicketOptions, conn: Connection) -> Result<(), error::Error> {
+fn abandon_ticket(opts: &Options, _ticket: &TicketOptions, abandon: &AbandonTicketOptions, conn: Connection) -> Result<(), error::Error> {
   let mut query = sqlx::Query::new();
   query
     .push("UPDATE ticket SET")
     .push("  owner_id = NULL")
     .push(", fence = fence + 1")
-    .push_where("owner_id = ").push_var(ticket.agent.to_owned())
+    .push_where("owner_id = ").push_var(opts.agent()?.to_owned())
     .push_where("state NOT IN ").push_list(&[State::Done]);
 
   if let Some(ids) = &abandon.id {

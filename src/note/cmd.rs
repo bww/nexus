@@ -10,8 +10,6 @@ use crate::Options;
 
 #[derive(Args, Debug)]
 pub struct NoteOptions {
-  #[clap(long, env="NEXUS_AGENT", help="A unique identifier of the agent operating on the project (use: 'agent new' to assign a new identifier)")]
-  agent: String,
   #[clap(subcommand)]
   command: NoteCommand,
 }
@@ -90,10 +88,10 @@ pub fn note(opts: &Options, note: &NoteOptions, conn: Connection) -> Result<(), 
   }
 }
 
-fn create_note(opts: &Options, note: &NoteOptions, create: &CreateNoteOptions, conn: Connection) -> Result<(), error::Error> {
+fn create_note(opts: &Options, _note: &NoteOptions, create: &CreateNoteOptions, conn: Connection) -> Result<(), error::Error> {
   let mut val = note::Note{
     id: 0,
-    creator_id: note.agent.to_owned(),
+    creator_id: opts.agent()?.to_owned(),
     commit_sha: create.commit.to_owned(),
     summary: create.summary.to_owned(),
     detail: cli::read_input(&create.detail)?,
