@@ -37,8 +37,7 @@ impl Options {
   }
 
   pub fn agent(&self) -> Result<&str, error::Error> {
-    self.agent.as_deref().ok_or_else(||
-      error::Error::ArgumentError("--agent (or NEXUS_AGENT) is required".to_owned()))
+    self.agent.as_deref().ok_or_else(|| error::Error::ArgumentError("--agent (or NEXUS_AGENT) is required".to_owned()))
   }
 
   pub fn project(&self) -> Result<path::PathBuf, error::Error> {
@@ -88,7 +87,7 @@ fn main() {
 fn cmd() -> Result<(), error::Error> {
   let opts = Options::parse();
 
-  if !matches!(opts.command, Command::Agent(_)) && opts.agent.is_none() {
+  if !matches!(opts.command, Command::Agent(_) | Command::Docs(_)) && opts.agent.is_none() {
     Options::command().error(
       clap::error::ErrorKind::MissingRequiredArgument,
       "--agent (or NEXUS_AGENT) is required for this subcommand",
